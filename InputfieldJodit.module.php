@@ -11,6 +11,7 @@
  * Settings are prefixed "jodit" so they never collide with InputfieldTinyMCE's
  * settings on the same field (e.g. its own toolbar and height).
  *
+ * @property string $joditSettingsField Name of another Jodit field whose editor settings this field uses ('' for its own)
  * @property string $joditToolbar Comma-separated Jodit button names
  * @property int $joditHeight Editor height in pixels
  * @property string $joditContentCss Stylesheet URLs for the editing area, one per line
@@ -41,6 +42,12 @@ class InputfieldJodit extends InputfieldTextarea {
 	/** @var bool Whether the shared assets have been queued for this request */
 	protected static $assetsReady = false;
 
+	/** @var array Default value of every jodit* setting */
+	protected $joditDefaults = [];
+
+	/** @var array Settings fields already warned about, so each warning shows once */
+	protected static $settingsFieldWarned = [];
+
 	public function __construct() {
 		parent::__construct();
 		$this->set('joditToolbar', self::defaultToolbar);
@@ -51,6 +58,10 @@ class InputfieldJodit extends InputfieldTextarea {
 		$this->set('joditClasses', '');
 		$this->set('joditFormats', 'p,h2,h3,h4,blockquote');
 		$this->set('joditPurifier', 1);
+		$this->set('joditSettingsField', '');
+		foreach ($this->getArray() as $key => $value) {
+			if (strpos($key, 'jodit') === 0) $this->joditDefaults[$key] = $value;
+		}
 	}
 
 	public function init() {
@@ -100,6 +111,40 @@ class InputfieldJodit extends InputfieldTextarea {
 	}
 
 	/**
+	 * The field this field takes its editor settings from, if any
+	 *
+	 * Only one level: the chosen field's own "Use settings from" is ignored, so
+	 * fields pointing at each other can't loop.
+	 */
+	protected function settingsField(): ?Field {
+		$name = (string) $this->joditSettingsField;
+		if ($name === '') return null;
+
+		$field = $this->wire()->fields->get($name);
+		$own = $this->hasField ? $this->hasField->name : '';
+		if ($field && $field->name !== $own && $field->inputfieldClass === $this->className()) return $field;
+
+		$key = $this->attr('name') . '>' . $name;
+		if (empty(self::$settingsFieldWarned[$key])) {
+			self::$settingsFieldWarned[$key] = true;
+			$this->warning(sprintf($this->_('%1$s: settings field "%2$s" is not a Jodit field, so this field\'s own settings are used'), $this->attr('name'), $name));
+		}
+		return null;
+	}
+
+	/**
+	 * A jodit* setting, from the settings field when there is one
+	 *
+	 * @return mixed
+	 */
+	protected function setting(string $name) {
+		$field = $this->settingsField();
+		if (!$field) return $this->get($name);
+		$value = $field->get($name);
+		return $value !== null ? $value : ($this->joditDefaults[$name] ?? null);
+	}
+
+	/**
 	 * Editor settings passed to InputfieldJodit.js
 	 */
 	protected function editorSettings(): array {
@@ -108,16 +153,16 @@ class InputfieldJodit extends InputfieldTextarea {
 		};
 
 		$classes = [];
-		foreach ($lines($this->joditClasses) as $line) {
+		foreach ($lines($this->setting('joditClasses')) as $line) {
 			[$class, $label] = array_pad(array_map('trim', explode('=', $line, 2)), 2, '');
 			$class = $this->wire()->sanitizer->name($class, false, 128, '-', ['allowedExtras' => ['-', '_']]);
 			if ($class !== '') $classes[$class] = $label !== '' ? $label : $class;
 		}
 
-		$contentCss = $lines($this->joditContentCss);
+		$contentCss = $lines($this->setting('joditContentCss'));
 		if (!count($contentCss)) $contentCss[] = $this->wire()->config->urls($this) . 'InputfieldJoditContent.css';
 
-		$toolbar = array_values(array_filter(array_map('trim', explode(',', (string) $this->joditToolbar))));
+		$toolbar = array_values(array_filter(array_map('trim', explode(',', (string) $this->setting('joditToolbar')))));
 		// The image dialog needs a page to pick images from. pwimage.js reads it from
 		// the page editor's #Inputfield_id, so a page editor is enough even when
 		// hasPage isn't set (Combo only sets it for InputfieldTinyMCE subfields).
@@ -126,12 +171,12 @@ class InputfieldJodit extends InputfieldTextarea {
 
 		return [
 			'buttons' => $toolbar,
-			'height' => max(100, (int) $this->joditHeight),
+			'height' => max(100, (int) $this->setting('joditHeight')),
 			'contentCss' => $contentCss,
-			'bodyClass' => trim(preg_replace('/[^\w\s-]/', '', (string) $this->joditBodyClass)),
+			'bodyClass' => trim(preg_replace('/[^\w\s-]/', '', (string) $this->setting('joditBodyClass'))),
 			'classes' => $classes,
 			'formats' => array_values(array_intersect(
-				array_map('trim', explode(',', (string) $this->joditFormats)),
+				array_map('trim', explode(',', (string) $this->setting('joditFormats'))),
 				['p', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre']
 			)),
 			'readonly' => (bool) $this->readonly,
@@ -175,7 +220,7 @@ class InputfieldJodit extends InputfieldTextarea {
 	 */
 	public function purifyValue(string $value): string {
 		$value = str_replace(["\r\n", "\r"], "\n", $value);
-		if ($value === '' || !$this->joditPurifier) return $value;
+		if ($value === '' || !$this->setting('joditPurifier')) return $value;
 
 		/** @var MarkupHTMLPurifier $purifier */
 		$purifier = $this->wire()->modules->get('MarkupHTMLPurifier');
@@ -192,6 +237,19 @@ class InputfieldJodit extends InputfieldTextarea {
 		$fs->label = $this->_('Jodit editor');
 		$fs->icon = 'pencil-square-o';
 		$inputfields->add($fs);
+
+		/** @var InputfieldSelect $f */
+		$f = $modules->get('InputfieldSelect');
+		$f->attr('name', 'joditSettingsField');
+		$f->label = $this->_('Use settings from');
+		$f->description = $this->_('Use another Jodit field\'s editor settings, so a group of fields is configured in one place. The settings below are then ignored.');
+		$own = $this->hasField ? $this->hasField->name : '';
+		foreach ($this->wire()->fields as $field) {
+			if ($field->name === $own || $field->inputfieldClass !== $this->className()) continue;
+			$f->addOption($field->name, $field->label ? "$field->label ($field->name)" : $field->name);
+		}
+		$f->attr('value', (string) $this->joditSettingsField);
+		$fs->add($f);
 
 		$f = $modules->get('InputfieldText');
 		$f->attr('name', 'joditToolbar');

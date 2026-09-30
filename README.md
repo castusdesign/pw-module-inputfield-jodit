@@ -18,8 +18,11 @@ Why it exists: the core bundles TinyMCE 6.8.2, which has unfixed high-severity X
 
 These are under **Input > Jodit editor** on the field:
 
+Fields that share a settings field should be switched from TinyMCE to Jodit together, so none of them points at a field using a different editor.
+
 | Setting | Default |
 |---|---|
+| Use settings from | none. Pick another Jodit field to use its editor settings (toolbar, formats, height, classes, stylesheets, body class, purifier), and this field's own settings are ignored. It's one level only, like TinyMCE's settings field. If the chosen field isn't a Jodit field, the field falls back to its own settings and shows a warning. |
 | Toolbar | `paragraph, bold, italic, underline, strikethrough, \|, ul, ol, indent, outdent, \|, pwlink, unlink, pwimage, table, hr, \|, classSpan, \|, undo, redo, eraser, source, fullsize` |
 | Block formats | `p,h2,h3,h4,blockquote` |
 | Height (px) | 400 |

@@ -181,6 +181,42 @@ test('saved values are always purified, even when submitted directly', async ({ 
   expect(read().body).toBe(stored.body);
 });
 
+test('a field using another field\'s settings gets that field\'s editor setup', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await expect(page.locator('#Inputfield_summary.InputfieldJoditLoaded')).toBeAttached();
+  const summary = page.locator('#wrap_Inputfield_summary');
+  // body's toolbar (with pwlink and pwimage), not summary's own "bold" only
+  await expect(summary.locator('.jodit-toolbar-button_pwlink')).toHaveCount(1);
+  await expect(summary.locator('.jodit-toolbar-button_pwimage')).toHaveCount(1);
+  // body's body class, not summary's own
+  const bodyClass = await summary.frameLocator('.jodit-wysiwyg_iframe').locator('body').getAttribute('class');
+  expect(bodyClass).toContain('shared-settings');
+  expect(bodyClass).not.toContain('own-settings');
+});
+
+test('a field using another field\'s settings is purified by that field\'s setting', async ({ page }) => {
+  // summary's own joditPurifier is off, body's is on, and body's must apply
+  await openEditor(page, stored.pageId);
+  const status = await page.evaluate(async () => {
+    const form = /** @type {HTMLFormElement} */ (document.querySelector('#ProcessPageEdit'));
+    const data = new FormData(form);
+    data.set('summary', '<p>Summary text.</p><img src="x" onerror="alert(1)">');
+    data.set('submit_save', 'Save');
+    return (await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin' })).status;
+  });
+  expect(status).toBe(200);
+  expect(read().summary).not.toContain('onerror');
+});
+
+test('a settings field that isn\'t a Jodit field falls back to the field\'s own settings, with a warning', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await expect(page.locator('#Inputfield_notes.InputfieldJoditLoaded')).toBeAttached();
+  const notes = page.locator('#wrap_Inputfield_notes');
+  await expect(notes.locator('.jodit-toolbar-button_bold')).toHaveCount(1);
+  await expect(notes.locator('.jodit-toolbar-button_pwlink')).toHaveCount(0);
+  await expect(page.getByText('settings field "title" is not a Jodit field')).toBeVisible();
+});
+
 test('HTML Purifier strips unsafe markup on save', async ({ page }) => {
   await openEditor(page, stored.pageId);
   await page.evaluate(() => {

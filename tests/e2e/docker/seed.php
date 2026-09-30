@@ -40,7 +40,33 @@ if (!$reset) {
     $body->contentType = FieldtypeTextarea::contentTypeHTML;
     $body->set('joditContentCss', '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css');
     $body->set('joditClasses', "tick-list=Tick list\nhighlight=Highlight");
+    $body->set('joditBodyClass', 'mce-content-body shared-settings');
     $fields->save($body);
+
+    // Takes body's settings. Its own settings differ, so the test can tell
+    // they're ignored (including purifier off, which must not apply).
+    $summary = $fields->get('summary') ?: new Field();
+    $summary->type = $modules->get('FieldtypeTextarea');
+    $summary->name = 'summary';
+    $summary->label = 'Summary';
+    $summary->inputfieldClass = 'InputfieldJodit';
+    $summary->contentType = FieldtypeTextarea::contentTypeHTML;
+    $summary->set('joditSettingsField', 'body');
+    $summary->set('joditToolbar', 'bold');
+    $summary->set('joditBodyClass', 'own-settings');
+    $summary->set('joditPurifier', 0);
+    $fields->save($summary);
+
+    // Points at a field that isn't a Jodit field, so falls back to its own settings
+    $notes = $fields->get('notes') ?: new Field();
+    $notes->type = $modules->get('FieldtypeTextarea');
+    $notes->name = 'notes';
+    $notes->label = 'Notes';
+    $notes->inputfieldClass = 'InputfieldJodit';
+    $notes->contentType = FieldtypeTextarea::contentTypeHTML;
+    $notes->set('joditSettingsField', 'title');
+    $notes->set('joditToolbar', 'bold, italic');
+    $fields->save($notes);
 
     $images = $fields->get('images') ?: new Field();
     $images->type = $modules->get('FieldtypeImage');
@@ -66,7 +92,7 @@ if (!$reset) {
     $fields->save($blocks);
 
     $basic = $templates->get('basic-page');
-    foreach ([$body, $images, $blocks] as $f) {
+    foreach ([$body, $images, $blocks, $summary, $notes] as $f) {
         if (!$basic->fieldgroup->has($f)) $basic->fieldgroup->add($f);
     }
     $basic->fieldgroup->save();
@@ -103,6 +129,10 @@ $fixture = function ($name) use ($imageUrl, $jodit) {
 
 $page->body = $fixture('content.html');
 $page->save('body');
+$page->summary = '<p>Summary text.</p>';
+$page->save('summary');
+$page->notes = '';
+$page->save('notes');
 
 foreach ($page->blocks as $item) $page->blocks->remove($item);
 $page->save('blocks');

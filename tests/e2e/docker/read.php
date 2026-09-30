@@ -14,5 +14,6 @@ echo json_encode([
     'body' => (string) $page->body,
     'blockId' => $block ? $block->id : 0,
     'block' => $block ? (string) $block->body : '',
+    'summary' => (string) $page->summary,
     'imageUrl' => $page->images->count() ? $page->images->first()->url : '',
 ]);
