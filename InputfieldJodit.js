@@ -24,6 +24,61 @@ var InputfieldJodit = {
 		return cfg && cfg.labels ? cfg.labels : {};
 	},
 
+	/**
+	 * A TinyMCE-style editor.selection for Jodit
+	 *
+	 * Lets the pwimage/pwlink plugins, ported from InputfieldTinyMCE, keep
+	 * calling getNode(), select(), getContent() and setContent() as upstream
+	 * does, so they stay a small diff from ProcessWire's originals. Adds
+	 * save()/restore(), because ProcessWire's dialogs take focus and Jodit
+	 * would otherwise lose the selection.
+	 *
+	 * @param {import('jodit').Jodit} editor
+	 */
+	selection: function(editor) {
+		var selected = null; // node passed to select(); setContent() replaces it
+		return {
+			getNode: function() {
+				var sel = editor.s.sel;
+				var range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+				// A selected image (or other element) rather than a text range
+				if(range && range.startContainer === range.endContainer && range.endOffset - range.startOffset === 1) {
+					var child = range.startContainer.childNodes[range.startOffset];
+					if(child && child.nodeType === 1) return child;
+				}
+				var node = editor.s.current();
+				if(node && node.nodeType === 3) node = node.parentNode;
+				return node || editor.editor;
+			},
+			select: function(node) {
+				selected = node;
+				editor.s.select(node);
+			},
+			getContent: function(options) {
+				if(options && options.format === 'text') return editor.s.sel ? editor.s.sel.toString() : '';
+				return editor.s.html;
+			},
+			setContent: function(html) {
+				if(selected && selected.isConnected) {
+					var tmp = editor.ed.createElement('div');
+					tmp.innerHTML = html;
+					selected.replaceWith.apply(selected, Array.prototype.slice.call(tmp.childNodes));
+				} else {
+					if(editor.s.hasMarkers) editor.s.restore();
+					editor.s.insertHTML(html);
+				}
+				editor.synchronizeValues();
+				editor.e.fire('change');
+			},
+			save: function() {
+				editor.s.save();
+			},
+			restore: function() {
+				if(editor.s.hasMarkers) editor.s.restore();
+			}
+		};
+	},
+
 	options: function(textarea) {
 		var s = JSON.parse(textarea.getAttribute('data-jodit') || '{}');
 		var formats = { p: 'Paragraph', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', blockquote: 'Quote', pre: 'Code' };
@@ -76,13 +131,13 @@ var InputfieldJodit = {
 		editor.e.on(editor.editor, 'dblclick', function(e) {
 			var target = e.target;
 			if(!target || editor.o.readonly) return;
-			if(target.nodeName === 'IMG' && typeof pwJoditImage === 'function') {
-				pwJoditImage(editor, target);
+			if(target.nodeName === 'IMG' && typeof pwJodit_image === 'function') {
+				editor.s.select(target);
+				pwJodit_image(editor);
 				return false;
 			}
-			var link = target.closest ? target.closest('a') : null;
-			if(link && typeof pwJoditLink === 'function') {
-				pwJoditLink(editor, link);
+			if(target.closest && target.closest('a') && typeof pwJodit_link === 'function') {
+				pwJodit_link(editor);
 				return false;
 			}
 		});

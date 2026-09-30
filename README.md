@@ -55,6 +55,18 @@ The "Check bundled Jodit" workflow runs `npm run check-jodit` and fails while `j
 
 Before merging, check the [changelog](https://github.com/xdan/jodit/blob/main/CHANGELOG.md) for changes to the selection, controls or popup APIs that `plugins/pwimage.js`, `plugins/pwlink.js` and `InputfieldJodit.js` use.
 
+## Keeping pwimage and pwlink in step with ProcessWire
+
+`plugins/pwimage.js` and `plugins/pwlink.js` are ProcessWire's own TinyMCE plugins, changed as little as possible. Each change is marked `Jodit:`. That's about 60 lines per file, mostly the port header and the toolbar button.
+
+The plugins still call `selection.getNode()`, `select()`, `getContent()` and `setContent()` as upstream does. Those calls go through the TinyMCE-style adapter, `InputfieldJodit.selection()` in `InputfieldJodit.js`.
+
+To pick up an upstream fix, diff ProcessWire's current plugin against ours, then apply anything outside the `Jodit:` lines:
+
+```sh
+diff -u path/to/processwire/wire/modules/Inputfield/InputfieldTinyMCE/plugins/pwimage.js plugins/pwimage.js
+```
+
 ## Limitations
 
 - **Combo** (ProFields): enable "Jodit" under the Combo module's *Allowed field/input types* to use it for subfields. That setup is untested, and has two known gaps:

@@ -1,156 +1,247 @@
 /**
- * pwlink for Jodit: insert or edit links with ProcessWire's link dialog
+ * pwlink plugin for Jodit
  *
- * Ported from ProcessWire's InputfieldTinyMCE plugins/pwlink.js
- * (https://github.com/processwire/processwire). This file stays under the
- * Mozilla Public License 2.0, like the original: https://mozilla.org/MPL/2.0/
- * Changes: TinyMCE selection calls replaced with Jodit's, the selection is
- * saved and restored around the dialog, and the button is a Jodit control.
+ * Ported from ProcessWire's InputfieldTinyMCE plugins/pwlink.js and, like the
+ * original, under the Mozilla Public License 2.0: https://mozilla.org/MPL/2.0/
+ * Kept as close to the original as possible so upstream fixes are easy to
+ * apply; every change is marked "Jodit:".
+ *
+ * @param editor
+ *
  */
-function pwJoditLink(editor, clickedLink) {
-
+function pwJodit_link(editor) {
+	
 	var $ = jQuery;
-	var $iframe;
-	var labels = jQuery.extend({ insertLink: 'Insert', cancel: 'Cancel' }, InputfieldJodit.labels());
-
-	var node = clickedLink || editor.s.current();
-	if(node && node.nodeType === 3) node = node.parentNode;
-	var nodeName = node ? node.nodeName.toUpperCase() : '';
-	var selectionText = editor.s.sel ? editor.s.sel.toString() : '';
-	var selectionHtml = editor.s.html;
-	var $existingLink = null;
-	var target = null; // element to replace with the new link, if any
-
+	var $iframe; // set after modalSettings 
+	var selection = InputfieldJodit.selection(editor); // Jodit: TinyMCE-style selection adapter
+	var node = selection.getNode();
+	var nodeName = node.nodeName.toUpperCase(); // will typically be 'A', 'IMG' or 'P' 
+	var selectionText = selection.getContent({ format: 'text' });
+	var selectionHtml = selection.getContent();
+	
+	var labels = {
+		insertLink: 'Insert',
+		cancel: 'Cancel'
+	};
+	
+	if(typeof ProcessWire.config.InputfieldJodit !== 'undefined') { // Jodit: own config key
+		labels = ProcessWire.config.InputfieldJodit.labels; // translated text labels
+	}
+	
 	function getPageId() {
-		var $in = $('#Inputfield_id');
-		return $in.length ? $in.val() : $(editor.element).closest('.Inputfield').attr('data-pid');
-	}
-
-	function putHtml(html) {
-		if(target && target.isConnected) {
-			var tmp = editor.ed.createElement('div');
-			tmp.innerHTML = html;
-			target.replaceWith.apply(target, Array.prototype.slice.call(tmp.childNodes));
+		var $in = jQuery("#Inputfield_id");
+		var pageId;
+		if($in.length) {
+			pageId = $in.val();
 		} else {
-			editor.s.restore();
-			editor.s.insertHTML(html);
+			pageId = $("#" + editor.id).closest('.Inputfield').attr('data-pid');
 		}
-		editor.synchronizeValues();
-		editor.e.fire('change');
+		return pageId;
 	}
-
-	function clickInsert() {
+	
+	// action when insert link button is clicked
+	function clickInsert($iframe) {
+		
 		var $i = $iframe.contents();
 		var $a = $($('#link_markup', $i).text());
+		
 		if($a.attr('href') && $a.attr('href').length) {
-			// Unchanged link text: keep the original markup (e.g. bold or an image inside the link)
-			if($a.text() === selectionText || !$a.text().length) $a.html(selectionHtml);
-			putHtml($('<div />').append($a).html());
+			if($a.text() === selectionText || !$a.text().length) {
+				// if input text has not changed from original, then use the original HTML rather than the text
+				$a.html(selectionHtml);
+			}
+			var html = $('<div />').append($a).html();
+			selection.setContent(html);
 		}
+		
 		$iframe.dialog('close');
 	}
-
+	
 	function getAnchorIds() {
-		var anchors = [];
-		$('<div>' + editor.value + '</div>').find('a[id]').each(function() { anchors.push(this.id); });
+		var $content = $(editor.value); // Jodit: editor.value rather than getContent()
+		var anchors = []; 
+		$content.find('a').each(function() {
+			var $a = $(this);
+			var id = $a.attr('id');
+			if(id) anchors.push(id);
+		}); 
 		return anchors;
 	}
-
-	function buildModalUrl() {
-		var $textarea = $(editor.element);
+	
+	function buildModalUrl($existingLink) {
+		
+		var $textarea = jQuery('#' + editor.id); // get textarea of this instance
 		var $langWrapper = $textarea.closest('.LanguageSupport');
-		var url = ProcessWire.config.urls.admin + 'page/link/?modal=1&id=' + getPageId();
+		var modalUrl = ProcessWire.config.urls.admin + 'page/link/?modal=1&id=' + getPageId();
 		var n;
-
+		
 		if($langWrapper.length) {
-			url += '&lang=' + $langWrapper.data('language');
+			// multi-language field
+			modalUrl += '&lang=' + $langWrapper.data('language');
 		} else {
-			var $tableLang = $textarea.parents('.InputfieldTable_langTabs').find('li.ui-state-active a');
-			if($tableLang.length && typeof $tableLang.data('lang') !== 'undefined') url += '&lang=' + $tableLang.data('lang');
-			else if($('#pw-edit-lang').length) url += '&lang=' + $('#pw-edit-lang').val();
+			// multi-language field in Table
+			$langWrapper = $textarea.parents('.InputfieldTable_langTabs').find('li.ui-state-active a')
+			if($langWrapper.length && typeof $langWrapper.data('lang') !== 'undefined') {
+				modalUrl += '&lang=' + $langWrapper.data('lang');
+			} else if(jQuery('#pw-edit-lang').length) {
+				modalUrl += '&lang=' + $('#pw-edit-lang').val(); // front-end editor
+			}
 		}
-
-		if($existingLink && $existingLink.length) {
-			['href', 'title', 'class', 'rel', 'target'].forEach(function(attr) {
-				var val = $existingLink.attr(attr);
-				if(val && val.length) url += '&' + attr + '=' + encodeURIComponent(val);
-			});
+		
+		if($existingLink != null) {
+			var attrs = ['href', 'title', 'class', 'rel', 'target'];
+			for(n = 0; n < attrs.length; n++) {
+				var val = $existingLink.attr(attrs[n]);
+				if(val && val.length) modalUrl += '&' + attrs[n] + '=' + encodeURIComponent(val);
+			}
 		}
-
+		
+		// add any anchors to the modal URL
 		var anchors = getAnchorIds();
-		for(n = 0; n < anchors.length; n++) url += '&anchors[]=' + encodeURIComponent(anchors[n]);
-
+		if(anchors.length > 0) {
+			for(n = 0; n < anchors.length; n++) {
+				modalUrl += '&anchors[]=' + encodeURIComponent(anchors[n]);
+			}
+		}
+		
+		// set link text
 		var linkText = ($existingLink && $existingLink.text().length) ? $existingLink.text() : selectionText;
-		if(nodeName !== 'IMG' && linkText.length) url += '&text=' + encodeURIComponent(linkText);
-		return url;
+		
+		if(nodeName !== 'IMG' && linkText.length) {
+			modalUrl += '&text=' + encodeURIComponent(linkText);
+		}
+	
+		return modalUrl;
 	}
-
-	function iframeLoad() {
+	
+	function buildModalSettings() {
+		return {
+			title: "<i class='fa fa-link'></i> " + labels.insertLink,
+				open: function() {
+				/*
+				if($(".cke_maximized").length > 0) {
+					// the following is required when CKE is maximized to make sure dialog is on top of it
+					$('.ui-dialog').css('z-index', 9999);
+					$('.ui-widget-overlay').css('z-index', 9998);
+				}
+				 */
+			},
+			close: function() { selection.restore(); }, // Jodit: drop the saved selection if cancelled
+			buttons: [{
+				'class': "pw_link_submit_insert",
+				'html': "<i class='fa fa-link'></i> " + labels.insertLink,
+				'click': function() {
+					clickInsert($iframe);
+				}
+			}, {
+				'html': "<i class='fa fa-times-circle'></i> " + labels.cancel,
+				'click': function() {
+					$iframe.dialog('close');
+				},
+				'class': 'ui-priority-secondary'
+			}]
+		};
+	}
+	
+	function iframeLoad($iframe) {
 		var $i = $iframe.contents();
 		$i.find('#ProcessPageEditLinkForm').data('iframe', $iframe);
-		// Enter in the URL box inserts the link
+		
+		// capture enter key in main URL text input
 		$('#link_page_url_input', $i).on('keydown', function(event) {
-			var val = ($(this).val() || '').trim();
+			var $this = $(this);
+			var val = $this.val();
+			val = typeof val == 'string' ? val.trim() : '';
 			if(event.keyCode == 13) {
 				event.preventDefault();
-				if(val.length) clickInsert();
+				if(val.length > 0) clickInsert($iframe);
 				return false;
 			}
 		});
 	}
-
+	
 	function init() {
-		// Inside a link (possibly within <em> etc.): edit the whole link
-		var link = node && node.closest ? node.closest('a') : null;
-		if(link) {
-			node = link;
-			nodeName = 'A';
+		
+		var inlineNodeNames = '/em/strong/i/b/u/s/span/small/abbr/cite/figcaption/';
+		var $existingLink = null;
+		
+		if(nodeName != 'A' && nodeName != 'IMG') {
+			var parentNode;
+			var parentNodeName;
+			do {
+				parentNode = node.parentNode;
+				if(!parentNode) break;
+				parentNodeName = parentNode.nodeName.toUpperCase();
+				if(parentNodeName === 'A') {
+					// if there is a parent <a> element then expand selection to include all of it
+					// this prevents double click on the <em> part of <a href='./'>foo <em>bar</em> baz</a> from
+					// just including the 'bar' as the link text
+					node = parentNode;
+					break;
+				} else if(inlineNodeNames.indexOf('/' + parentNodeName + '/') > -1 && $(node).text() === selectionText) {
+					// include certain wrapping inline elements for formatting in the selection text
+					node = parentNode;
+					selection.select(node);
+				} else {
+					node = parentNode;
+				}
+			} while(parentNode);
 		}
-
+		
+		nodeName = node.nodeName.toUpperCase(); // in case it changed above
+		
 		if(nodeName === 'A') {
+			// existing link
 			$existingLink = $(node);
 			selectionText = $existingLink.text();
 			selectionHtml = $existingLink.html();
-			target = node;
-		} else if(nodeName === 'IMG') {
-			var parentLink = node.closest('a');
-			$existingLink = parentLink ? $(parentLink) : null;
-			selectionText = node.outerHTML;
-			selectionHtml = selectionText;
-			target = parentLink || node;
+			selection.select(node);
+			
 		} else if(nodeName === 'TD' || nodeName === 'TH' || nodeName === 'TR') {
-			var first = selectionText.substring(0, 1);
-			if(first === '\n' || first === '\r') {
+			var firstChar = selectionText.substring(0,1);
+			if(firstChar === "\n" || firstChar === "\r") {
 				ProcessWire.alert('Your selection includes part of the table. Please try selecting the text again.');
 				return;
 			}
+			
+		} else if(nodeName === 'IMG') {
+			// linked image
+			var $img = $(node);
+			$existingLink = $img.parent('a');
+			selectionText = node.outerHTML;
+			selectionHtml = selectionText;
+			
 		} else if(selectionText.length < 1) {
-			return; // nothing selected and not on a link
+			// If not on top of link and there is no text selected - just return (don't load iframe at all)
+			return;
+			
+		} else {
+			// new link
 		}
-
-		editor.s.save(); // the dialog takes focus; restored before inserting
-
-		$iframe = pwModalWindow(buildModalUrl(), {
-			title: "<i class='fa fa-link'></i> " + labels.insertLink,
-			close: function() { if(editor.s.hasMarkers) editor.s.restore(); },
-			buttons: [{
-				'class': 'pw_link_submit_insert',
-				html: "<i class='fa fa-link'></i> " + labels.insertLink,
-				click: clickInsert
-			}, {
-				html: "<i class='fa fa-times-circle'></i> " + labels.cancel,
-				'class': 'ui-priority-secondary',
-				click: function() { $iframe.dialog('close'); }
-			}]
-		}, 'medium');
-		$iframe.on('load', iframeLoad);
+		
+		// settings for modal window
+		var modalUrl = buildModalUrl($existingLink);
+		var modalSettings = buildModalSettings();
+		
+		// create modal window
+		selection.save(); // Jodit: the dialog takes focus, so keep the selection
+		$iframe = pwModalWindow(modalUrl, modalSettings, 'medium');
+		
+		// modal window load event
+		$iframe.on('load', function() { iframeLoad($iframe) });
 	}
 
 	init();
 }
 
+/**
+ * Jodit: add the pwlink toolbar button (double-click is handled in InputfieldJodit.js)
+ *
+ */
 Jodit.defaultOptions.controls.pwlink = {
 	icon: 'link',
 	tooltip: 'Link',
-	exec: function(editor) { pwJoditLink(editor); }
+	exec: function(editor) {
+		pwJodit_link(editor);
+	}
 };
