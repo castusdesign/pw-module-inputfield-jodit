@@ -1,8 +1,10 @@
-name: Check bundled Jodit
+name: Checks
 
-# jodit/ is committed (ProcessWire modules install without a build step), so
-# make sure it's exactly the build of the jodit version in package-lock.json.
-# A Dependabot bump of jodit fails here until someone runs npm run sync-jodit.
+# - jodit/ is committed (ProcessWire modules install without a build step), so
+#   make sure it's exactly the build of the jodit version in package-lock.json.
+#   A Dependabot bump of jodit fails here until someone runs npm run sync-jodit.
+# - Type-check the module's JavaScript against that Jodit's types, so a renamed
+#   or removed method or option fails here too.
 
 on:
   push:
@@ -23,3 +25,4 @@ jobs:
           node-version: 24
       - run: npm ci --no-audit --no-fund
       - run: npm run check-jodit
+      - run: npm run typecheck

@@ -1,0 +1,16 @@
+{
+  // Type-checks the module's JavaScript against the installed Jodit's types
+  // (npm run typecheck), so a Jodit update that renames or removes an API we
+  // use fails in CI. Nothing is compiled.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "target": "es2021",
+    "lib": ["es2021", "dom"],
+    "moduleResolution": "bundler",
+    "skipLibCheck": true
+  },
+  "files": ["types/globals.d.ts", "InputfieldJodit.js", "plugins/pwimage.js", "plugins/pwlink.js"]
+}

@@ -5,6 +5,8 @@
 /package.json export-ignore
 /package-lock.json export-ignore
 /scripts export-ignore
+/tsconfig.json export-ignore
+/types export-ignore
 
 # Vendored build: never convert line endings, so it stays byte-identical to the jodit package
 /jodit/** -text

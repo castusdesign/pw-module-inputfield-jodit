@@ -51,7 +51,9 @@ npm run sync-jodit                          # copies the build into jodit/
 git add jodit package.json package-lock.json
 ```
 
-The "Check bundled Jodit" workflow runs `npm run check-jodit` and fails while `jodit/` doesn't match. A Dependabot PR is therefore red until someone has run `sync-jodit` on it.
+The "Checks" workflow runs two checks:
+- **`npm run check-jodit`** fails while `jodit/` doesn't match. A Dependabot PR is therefore red until someone has run `sync-jodit` on it.
+- **`npm run typecheck`** type-checks `InputfieldJodit.js` and the plugins against the new Jodit's own type definitions. It's TypeScript over plain JavaScript (`checkJs`, no build step), so a renamed or removed method or option we use fails before merge.
 
 Before merging, check the [changelog](https://github.com/xdan/jodit/blob/main/CHANGELOG.md) for changes to the selection, controls or popup APIs that `plugins/pwimage.js`, `plugins/pwlink.js` and `InputfieldJodit.js` use.
 

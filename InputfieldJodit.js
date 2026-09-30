@@ -38,6 +38,7 @@ var InputfieldJodit = {
 	selection: function(editor) {
 		var selected = null; // node passed to select(); setContent() replaces it
 		return {
+			/** @returns {any} An element, as TinyMCE's selection.getNode() returns */
 			getNode: function() {
 				var sel = editor.s.sel;
 				var range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
@@ -79,6 +80,12 @@ var InputfieldJodit = {
 		};
 	},
 
+	/**
+	 * Jodit options for a textarea, from its data-jodit settings
+	 *
+	 * @param {HTMLTextAreaElement} textarea
+	 * @returns {Parameters<typeof Jodit.make>[1]} checked against Jodit's own Config type
+	 */
 	options: function(textarea) {
 		var s = JSON.parse(textarea.getAttribute('data-jodit') || '{}');
 		var formats = { p: 'Paragraph', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', blockquote: 'Quote', pre: 'Code' };
