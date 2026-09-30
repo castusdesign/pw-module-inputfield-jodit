@@ -21,8 +21,10 @@ var InputfieldJoditStyles = {
 		'kbd', 'label', 'mark', 'meter', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'tt', 'var'],
 	block: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
 
-	// Blocks a block style can convert (the innermost of these around the text)
+	// Blocks a block style can convert, and all block elements (which a converted block mustn't contain)
 	textBlocks: 'p,h1,h2,h3,h4,h5,h6,div,pre,address',
+	blocks: 'address,article,aside,blockquote,dd,div,dl,dt,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,' +
+		'header,hr,li,main,nav,ol,p,pre,section,table,tbody,td,tfoot,th,thead,tr,ul',
 
 	/** @returns {{tags: string[], classes: string[], kind: string}} */
 	parse: function(value) {
@@ -40,10 +42,9 @@ var InputfieldJoditStyles = {
 	 *
 	 * @param {import('jodit').Jodit} editor
 	 * @param {string} selector
-	 * @param {boolean} [innermost] Leave out any that contain another match
 	 * @returns {Element[]}
 	 */
-	targets: function(editor, selector, innermost) {
+	targets: function(editor, selector) {
 		var root = editor.editor;
 		var found = [];
 		var add = function(el) {
@@ -66,25 +67,50 @@ var InputfieldJoditStyles = {
 				});
 			}
 		}
-		if(!innermost) return found;
-		return found.filter(function(el) {
-			return !found.some(function(other) { return other !== el && el.contains(other); });
-		});
+		return found;
 	},
 
 	/**
-	 * What a style applies to: the selected text blocks for a block style, or
-	 * the matching elements for any other non-inline style
+	 * What a style applies to, as {el} or, for loose content in a container,
+	 * {nodes}: for a block style the selected text blocks, and for any other
+	 * non-inline style the matching elements
 	 *
 	 * @param {import('jodit').Jodit} editor
+	 * @returns {Array<{el?: Element, nodes?: ChildNode[]}>}
 	 */
 	styleTargets: function(editor, style) {
-		return style.kind === 'block' ? this.targets(editor, this.textBlocks, true) : this.targets(editor, style.tags.join(','));
+		var t = this;
+		if(style.kind !== 'block') return this.targets(editor, style.tags.join(',')).map(function(el) { return { el: el }; });
+		var sel = editor.s.sel;
+		var range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+		var items = [];
+		this.targets(editor, this.textBlocks).forEach(function(el) {
+			var isBlock = function(node) { return node.nodeType === 1 && /** @type {Element} */ (node).matches(t.blocks); };
+			if(!Array.prototype.some.call(el.childNodes, isBlock)) {
+				items.push({ el: el });
+				return;
+			}
+			// A container with blocks inside, e.g. <div>Intro<p>Other</p></div>:
+			// only the runs of loose content the selection is in
+			var run = [];
+			var end = function() {
+				var text = run.map(function(node) { return node.textContent; }).join('');
+				var selected = range && run.some(function(node) { return range.intersectsNode(node); });
+				if(text.trim() !== '' && selected) items.push({ nodes: run });
+				run = [];
+			};
+			Array.prototype.forEach.call(el.childNodes, function(node) {
+				if(isBlock(node)) end(); else run.push(node);
+			});
+			end();
+		});
+		return items;
 	},
 
-	/** Whether the element already has the style (for block styles, is also that element) */
-	has: function(el, style) {
-		if(style.kind === 'block' && el.nodeName.toLowerCase() !== style.tags[0]) return false;
+	/** Whether a target already has the style (for block styles, is also that element) */
+	has: function(item, style) {
+		var el = item.el;
+		if(!el || (style.kind === 'block' && el.nodeName.toLowerCase() !== style.tags[0])) return false;
 		return style.classes.every(function(cls) { return el.classList.contains(cls); });
 	},
 
@@ -180,15 +206,29 @@ var InputfieldJoditStyles = {
 		var t = this;
 		var targets = this.styleTargets(editor, style);
 		if(!targets.length) return;
-		var remove = targets.every(function(el) { return t.has(el, style); });
-		// Markers keep the selection through renamed blocks
-		editor.s.save();
-		targets.forEach(function(el) {
-			if(!remove && style.kind === 'block') el = t.rename(el, style.tags[0]);
+		var remove = targets.every(function(item) { return t.has(item, style); });
+		// The selection's text nodes stay in the document when blocks are renamed or wrapped
+		var sel = editor.s.sel;
+		var range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+		var styled = targets.map(function(item) {
+			var el = item.el;
+			if(item.nodes) {
+				el = editor.ed.createElement(style.tags[0]);
+				item.nodes[0].before(el);
+				item.nodes.forEach(function(node) { el.appendChild(node); });
+			} else if(!remove && style.kind === 'block') {
+				el = t.rename(el, style.tags[0]);
+			}
 			style.classes.forEach(function(cls) { el.classList.toggle(cls, !remove); });
 			if(!el.classList.length) el.removeAttribute('class');
+			return el;
 		});
-		editor.s.restore();
+		if(!range || !editor.editor.contains(range.startContainer) || !editor.editor.contains(range.endContainer)) {
+			range = editor.ed.createRange();
+			range.selectNodeContents(styled[0]);
+			range.collapse(false);
+		}
+		editor.s.selectRange(range);
 		editor.synchronizeValues();
 	},
 
@@ -196,10 +236,12 @@ var InputfieldJoditStyles = {
 	isActive: function(editor, value) {
 		var style = this.parse(value);
 		var t = this;
-		var targets = style.kind === 'inline' ? this.targets(editor, style.tags[0]) : this.styleTargets(editor, style);
-		return targets.length > 0 && targets.every(function(el) {
-			return style.kind === 'inline' ? style.classes.every(function(cls) { return el.classList.contains(cls); }) : t.has(el, style);
-		});
+		if(style.kind === 'inline') {
+			var spans = this.targets(editor, style.tags[0]);
+			return spans.length > 0 && spans.every(function(el) { return t.has({ el: el }, style); });
+		}
+		var targets = this.styleTargets(editor, style);
+		return targets.length > 0 && targets.every(function(item) { return t.has(item, style); });
 	},
 
 	/** @param {import('jodit').Jodit} editor */

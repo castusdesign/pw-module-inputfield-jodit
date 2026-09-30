@@ -413,3 +413,18 @@ test('applying a text style again takes it off', async ({ page }) => {
   await save(page);
   expect(read().body).toBe(stored.body);
 });
+
+test('a block style in a container of blocks styles only the loose text, not the container', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await page.evaluate(() => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    editor.value = '<div>Intro<p>Other</p></div>';
+    const range = editor.ed.createRange();
+    range.setStart(editor.editor.querySelector('div').firstChild, 2);
+    range.collapse(true);
+    editor.s.selectRange(range);
+  });
+  await applyStyle(page, 'Section title');
+  await save(page);
+  expect(read().body).toBe('<div><h2 class="section-title">Intro</h2><p>Other</p></div>');
+});
