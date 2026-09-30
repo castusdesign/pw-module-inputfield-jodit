@@ -118,8 +118,11 @@ class InputfieldJodit extends InputfieldTextarea {
 		if (!count($contentCss)) $contentCss[] = $this->wire()->config->urls($this) . 'InputfieldJoditContent.css';
 
 		$toolbar = array_values(array_filter(array_map('trim', explode(',', (string) $this->joditToolbar))));
-		// The image dialog needs a page to pick images from
-		if (!$this->hasPage) $toolbar = array_values(array_diff($toolbar, ['pwimage']));
+		// The image dialog needs a page to pick images from. pwimage.js reads it from
+		// the page editor's #Inputfield_id, so a page editor is enough even when
+		// hasPage isn't set (Combo only sets it for InputfieldTinyMCE subfields).
+		$inPageEditor = $this->wire()->process instanceof WirePageEditor;
+		if (!$this->hasPage && !$inPageEditor) $toolbar = array_values(array_diff($toolbar, ['pwimage']));
 
 		return [
 			'buttons' => $toolbar,

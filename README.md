@@ -69,9 +69,11 @@ diff -u path/to/processwire/wire/modules/Inputfield/InputfieldTinyMCE/plugins/pw
 
 ## Limitations
 
-- **Combo** (ProFields): enable "Jodit" under the Combo module's *Allowed field/input types* to use it for subfields. That setup is untested, and has two known gaps:
-  - Combo only passes the page to TinyMCE subfields, so the `pwimage` button is hidden in a Combo.
-  - Combo's Textformatter support doesn't include Jodit.
+- **Combo** (ProFields): enable "Jodit" under the Combo module's *Allowed field/input types* to use it for subfields. That setup is untested. Combo has a fixed list of text types (TinyMCE, CKEditor, Text and so on) that doesn't include Jodit, so Jodit subfields:
+  - can't have Textformatters;
+  - have no multi-language variant.
+
+  The `pwimage` button still works in a Combo inside the page editor, even though Combo only passes the page to TinyMCE subfields.
 - **FormBuilder** hasn't been tested.
 - No inline or lazy mode yet, and no drag-and-drop image upload.
 
