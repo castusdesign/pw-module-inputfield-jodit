@@ -228,3 +228,46 @@ test('HTML Purifier strips unsafe markup on save', async ({ page }) => {
   expect(body).toContain('<p>Safe</p>');
   expect(body).not.toMatch(/onerror|onload|javascript:|<svg|<script/i);
 });
+
+// "Copy settings from TinyMCE" (see seed.php for the TinyMCE settings)
+const imported = (field) => JSON.parse(php('import.php', field));
+
+test('TinyMCE settings are copied as TinyMCE really uses them', () => {
+  const { settings, notes } = imported('legacy');
+  expect(settings).toEqual({
+    // The field's toolbar, with its styles menu as block formats and classes
+    joditToolbar: 'paragraph, |, classSpan, |, bold, italic, pwlink, unlink, source',
+    joditFormats: 'p,h1,h2,h3,h4,h5,h6,blockquote,pre',
+    // From the module-wide styleFormatsCSS, content CSS and defaultsJSON
+    joditClasses: 'highlight',
+    joditContentCss: '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css',
+    joditBodyClass: 'mce-content-body prose',
+    joditHeight: 321,
+    // The field doesn't have the purifier feature
+    joditPurifier: 0,
+  });
+  expect(notes).toEqual([
+    "Styles that apply a class to a block or element, which Jodit's classSpan button can't do: ul.tick-list",
+    "Toolbar buttons Jodit doesn't have: anchor",
+  ]);
+});
+
+test('a TinyMCE field using another field\'s settings uses that field\'s Jodit settings', () => {
+  const { settings, notes } = imported('legacy_child');
+  expect(settings.joditSettingsField).toBe('legacy');
+  expect(notes).toEqual([]);
+});
+
+test('ticking "Copy settings from TinyMCE" copies them into the field\'s Jodit settings', async ({ page }) => {
+  const { id } = imported('switched');
+  await page.goto(`/processwire/setup/field/edit?id=${id}`);
+  await page.evaluate(() => {
+    /** @type {HTMLInputElement} */ (document.querySelector('input[name="joditImportTinyMCE"]')).checked = true;
+  });
+  await Promise.all([page.waitForNavigation(), page.click('#Inputfield_submit_save_field')]);
+  await expect(page.getByText('Copied the TinyMCE settings into the Jodit settings below')).toBeAttached();
+  await expect(page.locator('input[name="joditToolbar"]')).toHaveValue('paragraph, |, bold, |, ol');
+  const { stored } = imported('switched');
+  expect(stored).toMatchObject({ joditToolbar: 'paragraph, |, bold, |, ol', joditFormats: 'p,h1,h2,h3,h4,h5,h6', joditHeight: 250 });
+  expect(stored.joditImportTinyMCE).toBeUndefined();
+});

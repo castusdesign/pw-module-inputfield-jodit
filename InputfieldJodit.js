@@ -88,7 +88,7 @@ var InputfieldJodit = {
 	 */
 	options: function(textarea) {
 		var s = JSON.parse(textarea.getAttribute('data-jodit') || '{}');
-		var formats = { p: 'Paragraph', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', blockquote: 'Quote', pre: 'Code' };
+		var formats = { p: 'Paragraph', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', blockquote: 'Quote', pre: 'Code' };
 		var formatList = {};
 		(s.formats || ['p']).forEach(function(tag) { formatList[tag] = formats[tag] || tag; });
 

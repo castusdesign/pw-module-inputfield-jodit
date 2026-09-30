@@ -10,6 +10,11 @@
  *   images  one generated image, which the fixture's <figure> uses
  *   blocks  a repeater with one item, whose body is fixtures/block.html
  *
+ * Also TinyMCE fields for the "Copy settings from TinyMCE" tests, on no template:
+ *   legacy        TinyMCE, with known settings
+ *   legacy_child  TinyMCE, using legacy's settings
+ *   switched      Jodit, still holding TinyMCE settings (reset each time)
+ *
  * Stored values are the fixtures after HTML Purifier (which the module runs
  * on every save), so an unchanged save should leave them byte-identical.
  */
@@ -26,7 +31,7 @@ $wire->users->setCurrentUser($wire->users->get('roles=superuser, sort=id'));
 
 if (!$reset) {
     $modules->refresh();
-    foreach (['InputfieldJodit', 'FieldtypeRepeater'] as $class) {
+    foreach (['InputfieldJodit', 'FieldtypeRepeater', 'InputfieldTinyMCE'] as $class) {
         if (!$modules->isInstalled($class)) $modules->install($class);
     }
     // Test site only: every test logs in, which the login throttle would block
@@ -91,12 +96,50 @@ if (!$reset) {
     $blocks->set('repeaterFields', [$body->id]);
     $fields->save($blocks);
 
+    // TinyMCE module-wide settings the import must pick up
+    $modules->saveConfig('InputfieldTinyMCE', array_merge($modules->getConfig('InputfieldTinyMCE'), [
+        'content_css' => 'custom',
+        'content_css_url' => '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css',
+        'defaultsJSON' => '{"body_class": "prose"}',
+        'styleFormatsCSS' => "span.highlight { color: red; }\nul.tick-list {}",
+    ]));
+
+    $legacy = $fields->get('legacy') ?: new Field();
+    $legacy->type = $modules->get('FieldtypeTextarea');
+    $legacy->name = 'legacy';
+    $legacy->inputfieldClass = 'InputfieldTinyMCE';
+    $legacy->contentType = FieldtypeTextarea::contentTypeHTML;
+    $legacy->set('toolbar', 'styles bold italic pwlink anchor code');
+    $legacy->set('height', 321);
+    $legacy->set('features', ['toolbar', 'menubar', 'stickybars', 'imgUpload', 'imgResize', 'pasteFilter']);
+    $fields->save($legacy);
+
+    $child = $fields->get('legacy_child') ?: new Field();
+    $child->type = $modules->get('FieldtypeTextarea');
+    $child->name = 'legacy_child';
+    $child->inputfieldClass = 'InputfieldTinyMCE';
+    $child->contentType = FieldtypeTextarea::contentTypeHTML;
+    $child->set('settingsField', 'legacy');
+    $fields->save($child);
+
     $basic = $templates->get('basic-page');
     foreach ([$body, $images, $blocks, $summary, $notes] as $f) {
         if (!$basic->fieldgroup->has($f)) $basic->fieldgroup->add($f);
     }
     $basic->fieldgroup->save();
 }
+
+$switched = $fields->get('switched') ?: new Field();
+$switched->type = $modules->get('FieldtypeTextarea');
+$switched->name = 'switched';
+$switched->inputfieldClass = 'InputfieldJodit';
+$switched->contentType = FieldtypeTextarea::contentTypeHTML;
+foreach ($switched->getArray() as $key => $value) {
+    if (strpos($key, 'jodit') === 0) $switched->remove($key);
+}
+$switched->set('toolbar', 'blocks bold | numlist');
+$switched->set('height', 250);
+$fields->save($switched);
 
 $page = $pages->get('/jodit-test/');
 if (!$page->id) {

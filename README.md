@@ -2,7 +2,7 @@
 
 [Jodit](https://xdsoft.net/jodit/) rich text editor for ProcessWire, as a drop-in alternative to the core's InputfieldTinyMCE.
 
-Switch a Textarea field's **Inputfield type** from TinyMCE to Jodit, and the stored HTML stays exactly as it is. Switch back, and TinyMCE's settings are still there. Jodit's settings are stored under their own `jodit*` names.
+Switch a Textarea field's **Inputfield type** from TinyMCE to Jodit, and the stored HTML stays exactly as it is. Switch back, and TinyMCE's settings are still there. Jodit's settings are stored under their own `jodit*` names, and can be [copied from TinyMCE's](#switching-from-tinymce).
 
 Why it exists: the core bundles TinyMCE 6.8.2, which has unfixed high-severity XSS advisories (CVE-2026-47759 to 47762). They are only fixed in TinyMCE 7+, which is GPL-licensed or commercial. Jodit is MIT-licensed.
 
@@ -18,18 +18,37 @@ Why it exists: the core bundles TinyMCE 6.8.2, which has unfixed high-severity X
 
 These are under **Input > Jodit editor** on the field:
 
-Fields that share a settings field should be switched from TinyMCE to Jodit together, so none of them points at a field using a different editor.
-
 | Setting | Default |
 |---|---|
 | Use settings from | none. Pick another Jodit field to use its editor settings (toolbar, formats, height, classes, stylesheets, body class, purifier), and this field's own settings are ignored. It's one level only, like TinyMCE's settings field. If the chosen field isn't a Jodit field, the field falls back to its own settings and shows a warning. |
 | Toolbar | `paragraph, bold, italic, underline, strikethrough, \|, ul, ol, indent, outdent, \|, pwlink, unlink, pwimage, table, hr, \|, classSpan, \|, undo, redo, eraser, source, fullsize` |
-| Block formats | `p,h2,h3,h4,blockquote` |
+| Block formats | `p,h2,h3,h4,blockquote`. Also available: `h1`, `h5`, `h6`, `pre` |
 | Height (px) | 400 |
 | Classes editors can apply (`classSpan` button) | none. One per line, `class` or `class=Label` |
 | Content stylesheets | the module's plain default |
 | Editing area body class | `mce-content-body` (TinyMCE's), so stylesheets written for TinyMCE apply unchanged |
 | Purify HTML on save | on |
+
+## Switching from TinyMCE
+
+1. Change the field's **Input > Inputfield type** to Jodit and save.
+2. Under **Input > Jodit editor**, tick **Copy settings from TinyMCE** and save again.
+
+The copy uses the settings TinyMCE really applies to the field: its own settings, TinyMCE's module-wide defaults (content CSS, `defaultsJSON`, `styleFormatsCSS`), and its settings field. That becomes the Jodit toolbar, block formats, classes, content stylesheet, body class, height, purifier and "Use settings from". Anything Jodit can't do is listed after saving, for example the `anchor` button or a style that puts a class on a list. TinyMCE's settings are left as they are, so switching back still works.
+
+It's a one-off copy: after it, the Jodit settings are ordinary settings you can change.
+
+From the API, e.g. in a migration:
+
+```php
+$field->inputfieldClass = 'InputfieldJodit';
+$notes = $modules->get('InputfieldJodit')->importTinyMCE($field);
+$fields->save($field);
+```
+
+For a Combo subfield, pass its settings prefix, e.g. `importTinyMCE($comboField, 'i2_')`, and set `i2_type` to `Jodit`.
+
+Fields that use another field's settings point at that field with "Use settings from", so switch them together.
 
 ## Installing
 
@@ -74,7 +93,7 @@ diff -u path/to/processwire/wire/modules/Inputfield/InputfieldTinyMCE/plugins/pw
 
 ## Tests
 
-`tests/e2e` holds Playwright tests that run against a throwaway ProcessWire in Docker: MariaDB, plus PHP and Apache with the pinned ProcessWire release. The install script installs the blank profile and this module. The seed script creates a Jodit body field, an images field, a repeater and a test page.
+`tests/e2e` holds Playwright tests that run against a throwaway ProcessWire in Docker: MariaDB, plus PHP and Apache with the pinned ProcessWire release. The install script installs the blank profile and this module. The seed script creates Jodit fields, an images field, a repeater, a test page, and TinyMCE fields to copy settings from.
 
 They check:
 - stored HTML survives an unedited save;
@@ -82,6 +101,8 @@ They check:
 - ProcessWire's link and image dialogs;
 - repeater items;
 - HTML Purifier on save, including values posted directly;
+- "Use settings from";
+- copying settings from TinyMCE, from the API and from the field settings;
 - that settings don't collide with InputfieldTinyMCE's.
 
 ```sh

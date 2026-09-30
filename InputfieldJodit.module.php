@@ -1,5 +1,7 @@
 <?php namespace ProcessWire;
 
+require_once __DIR__ . '/InputfieldJoditTinyMCE.php';
+
 /**
  * Jodit rich text editor Inputfield
  *
@@ -17,8 +19,9 @@
  * @property string $joditContentCss Stylesheet URLs for the editing area, one per line
  * @property string $joditBodyClass Class(es) on the editing area's <body>, for content stylesheets
  * @property string $joditClasses CSS classes editors can apply, one per line as "class" or "class=Label"
- * @property string $joditFormats Block formats, comma-separated from p,h2,h3,h4,h5,h6,blockquote,pre
+ * @property string $joditFormats Block formats, comma-separated from p,h1,h2,h3,h4,h5,h6,blockquote,pre
  * @property int $joditPurifier Run saved HTML through HTML Purifier (1) or not (0)
+ * @property int $joditImportTinyMCE Set by the field settings to copy TinyMCE's settings on the next edit
  *
  * MIT licence. The pwimage/pwlink plugins are ported from ProcessWire's
  * InputfieldTinyMCE and stay MPL-2.0 (see LICENSE).
@@ -177,7 +180,7 @@ class InputfieldJodit extends InputfieldTextarea {
 			'classes' => $classes,
 			'formats' => array_values(array_intersect(
 				array_map('trim', explode(',', (string) $this->setting('joditFormats'))),
-				['p', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre']
+				InputfieldJoditTinyMCE::formats
 			)),
 			'readonly' => (bool) $this->readonly,
 		];
@@ -228,7 +231,40 @@ class InputfieldJodit extends InputfieldTextarea {
 		return $purifier->purify($value);
 	}
 
+	/**
+	 * Copy a field's TinyMCE settings into its Jodit settings (the field isn't saved)
+	 *
+	 * Reads the settings TinyMCE would really use, so it's the same editor after
+	 * switching. TinyMCE's own settings are left as they are.
+	 *
+	 * @param Field $field
+	 * @param string $prefix Prefix of the settings, e.g. 'i2_' for a Combo subfield
+	 * @return array Notes on anything Jodit can't do, which wasn't copied
+	 */
+	public function importTinyMCE(Field $field, string $prefix = ''): array {
+		/** @var InputfieldJoditTinyMCE $import */
+		$import = $this->wire(new InputfieldJoditTinyMCE());
+		return $import->import($field, $prefix);
+	}
+
+	/**
+	 * Import TinyMCE's settings if "Copy settings from TinyMCE" was ticked on the last save
+	 */
+	protected function importTinyMCERequested() {
+		$field = $this->hasField;
+		if (!$field || !$field->get('joditImportTinyMCE') || $field->inputfieldClass !== $this->className()) return;
+		$notes = $this->importTinyMCE($field);
+		$field->remove('joditImportTinyMCE');
+		$this->wire()->fields->save($field);
+		foreach ($field->getArray() as $key => $value) {
+			if (strpos($key, 'jodit') === 0) $this->set($key, $value);
+		}
+		$this->message($this->_('Copied the TinyMCE settings into the Jodit settings below'));
+		foreach ($notes as $note) $this->warning($this->_('Not copied from TinyMCE:') . ' ' . $note);
+	}
+
 	public function ___getConfigInputfields() {
+		$this->importTinyMCERequested();
 		$inputfields = parent::___getConfigInputfields();
 		$modules = $this->wire()->modules;
 
@@ -251,6 +287,16 @@ class InputfieldJodit extends InputfieldTextarea {
 		$f->attr('value', (string) $this->joditSettingsField);
 		$fs->add($f);
 
+		if ($this->hasField && $this->hasField->inputfieldClass === $this->className()) {
+			$f = $modules->get('InputfieldCheckbox');
+			$f->attr('name', 'joditImportTinyMCE');
+			$f->label = $this->_('Copy settings from TinyMCE');
+			$f->description = $this->_('Replaces the settings below with this field\'s TinyMCE settings when you save, including "Use settings from". Anything Jodit can\'t do is listed after saving. The TinyMCE settings are kept, so switching back still works.');
+			$f->attr('value', 1);
+			$f->collapsed = Inputfield::collapsedYes;
+			$fs->add($f);
+		}
+
 		$f = $modules->get('InputfieldText');
 		$f->attr('name', 'joditToolbar');
 		$f->label = $this->_('Toolbar');
@@ -262,7 +308,7 @@ class InputfieldJodit extends InputfieldTextarea {
 		$f = $modules->get('InputfieldText');
 		$f->attr('name', 'joditFormats');
 		$f->label = $this->_('Block formats');
-		$f->description = $this->_('Comma-separated, from: p, h2, h3, h4, h5, h6, blockquote, pre');
+		$f->description = $this->_('Comma-separated, from: p, h1, h2, h3, h4, h5, h6, blockquote, pre');
 		$f->attr('value', $this->joditFormats);
 		$f->columnWidth = 50;
 		$fs->add($f);
