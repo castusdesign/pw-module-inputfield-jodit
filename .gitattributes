@@ -1,3 +1,7 @@
+# Always LF on checkout, whatever core.autocrlf says: the tests run shell
+# scripts in Linux containers, and CRLF breaks them
+* text=auto eol=lf
+
 # Not needed in an install: Composer uses git archive, which skips these
 /.github export-ignore
 /.gitattributes export-ignore
