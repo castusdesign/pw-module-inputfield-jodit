@@ -98,11 +98,12 @@ npm run test:e2e:down             # remove it
 
 ## Limitations
 
-- **Combo** (ProFields): enable "Jodit" under the Combo module's *Allowed field/input types* to use it for subfields. That setup is untested. Combo has a fixed list of text types (TinyMCE, CKEditor, Text and so on) that doesn't include Jodit, so Jodit subfields:
+- **Combo** (ProFields): enable "Jodit" under the Combo module's *Allowed field/input types* to use it for subfields. Tested by hand, not by the e2e suite: editors start, "Use settings from" works, unedited saves leave values unchanged (apart from character codes, below), and the link and image dialogs work. Combo has a fixed list of text types (TinyMCE, CKEditor, Text and so on) that doesn't include Jodit, so Jodit subfields:
   - can't have Textformatters;
   - have no multi-language variant.
 
   The `pwimage` button still works in a Combo inside the page editor, even though Combo only passes the page to TinyMCE subfields.
+- **Character codes:** named codes such as `&rsquo;` are saved as the plain character (`’`) the first time a field is saved with Jodit. The browser decodes them before Jodit sees them, and unlike TinyMCE, Jodit doesn't encode them again. `&amp;`, `&lt;`, `&gt;` and `&nbsp;` stay as codes.
 - **FormBuilder** hasn't been tested.
 - No inline or lazy mode yet, and no drag-and-drop image upload.
 
