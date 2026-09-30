@@ -1,72 +1,121 @@
 /**
  * InputfieldJodit "styles" toolbar button: apply the field's styles
  *
- * Each style is "element.class" (the list's keys, labels as values):
- * - "span.class" wraps the selected text in <span class="class">, as Jodit's
- *   own classSpan button does;
- * - any other element, e.g. "ul.tick-list" or "p.lead", toggles the class on
- *   that element around the cursor, like TinyMCE's block and selector styles.
- *   It's disabled while the cursor isn't in one.
+ * Each style's value is "tags|classes", e.g. "span|highlight" or
+ * "ul,ol|tick-list". Like TinyMCE's style formats, what it does depends on the
+ * element:
+ * - inline elements (span, small, strong…) wrap the selected text;
+ * - block elements (p, h1–h6, blockquote…) turn the selected blocks into that
+ *   element with the classes;
+ * - anything else (ul, table, img, a…) toggles the classes on those elements in
+ *   the selection, and is disabled while there are none.
  *
- * Keys always contain a dot, so they can't be mistaken for Jodit control names.
+ * Styles are {title, value} list items, so Jodit never mistakes a style for one
+ * of its own controls (it looks up plain keys and labels as control names).
  */
 var InputfieldJoditStyles = {
 
-	/** @returns {{tag: string, cls: string}} */
-	parse: function(key) {
-		var dot = key.indexOf('.');
-		return { tag: key.slice(0, dot).toLowerCase(), cls: key.slice(dot + 1) };
+	inline: ['span', 'small', 'strong', 'em', 'b', 'i', 'u', 's', 'code', 'mark', 'sup', 'sub', 'abbr', 'cite', 'q', 'kbd'],
+	block: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'div'],
+
+	/** @returns {{tags: string[], classes: string[], kind: string}} */
+	parse: function(value) {
+		var parts = String(value).split('|');
+		var tags = parts[0].split(',');
+		var classes = (parts[1] || '').split(' ').filter(Boolean);
+		var kind = 'element';
+		if(tags.length === 1 && this.inline.indexOf(tags[0]) > -1) kind = 'inline';
+		if(tags.length === 1 && this.block.indexOf(tags[0]) > -1) kind = 'block';
+		return { tags: tags, classes: classes, kind: kind };
 	},
 
 	/**
-	 * The element around the cursor that an element style applies to, if any
+	 * Elements with one of the tags that contain or are in the selection
 	 *
 	 * @param {import('jodit').Jodit} editor
-	 * @param {string} tag
-	 * @returns {Element|null}
+	 * @param {string[]} tags
+	 * @returns {Element[]}
 	 */
-	target: function(editor, tag) {
-		var node = editor.s.current();
-		if(node && node.nodeType === 3) node = node.parentNode;
-		var el = node && node.nodeType === 1 ? /** @type {Element} */ (node).closest(tag) : null;
-		return el && el !== editor.editor && editor.editor.contains(el) ? el : null;
-	},
-
-	/** @param {import('jodit').Jodit} editor */
-	apply: function(editor, key) {
-		var style = this.parse(key);
-		if(style.tag === 'span') {
-			editor.s.commitStyle({ element: 'span', attributes: { class: style.cls } });
-		} else {
-			var el = this.target(editor, style.tag);
-			if(!el) return;
-			el.classList.toggle(style.cls);
-			if(!el.classList.length) el.removeAttribute('class');
+	targets: function(editor, tags) {
+		var root = editor.editor;
+		var selector = tags.join(',');
+		var found = [];
+		var add = function(el) {
+			if(el && el !== root && root.contains(el) && found.indexOf(el) === -1) found.push(el);
+		};
+		var closest = function(node) {
+			if(node && node.nodeType === 3) node = node.parentNode;
+			return node && node.nodeType === 1 ? /** @type {Element} */ (node).closest(selector) : null;
+		};
+		var sel = editor.s.sel;
+		var range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+		if(!range) {
+			add(closest(editor.s.current()));
+			return found;
 		}
-		editor.synchronizeValues();
-		editor.e.fire('change');
+		add(closest(range.startContainer));
+		add(closest(range.endContainer));
+		if(!range.collapsed) {
+			Array.prototype.forEach.call(root.querySelectorAll(selector), function(el) {
+				if(range.intersectsNode(el)) add(el);
+			});
+		}
+		return found;
+	},
+
+	hasClasses: function(el, classes) {
+		return classes.every(function(cls) { return el.classList.contains(cls); });
 	},
 
 	/** @param {import('jodit').Jodit} editor */
-	isActive: function(editor, key) {
-		var style = this.parse(key);
-		var el = this.target(editor, style.tag === 'span' ? 'span.' + style.cls : style.tag);
-		return !!el && el.classList.contains(style.cls);
+	apply: function(editor, value) {
+		var style = this.parse(value);
+		if(style.kind !== 'element') {
+			editor.s.commitStyle({ element: /** @type {any} */ (style.tags[0]), attributes: { class: style.classes.join(' ') } });
+			return;
+		}
+		var targets = this.targets(editor, style.tags);
+		if(!targets.length) return;
+		var t = this;
+		var remove = targets.every(function(el) { return t.hasClasses(el, style.classes); });
+		targets.forEach(function(el) {
+			style.classes.forEach(function(cls) { el.classList.toggle(cls, !remove); });
+			if(!el.classList.length) el.removeAttribute('class');
+		});
+		editor.synchronizeValues();
+	},
+
+	/** @param {import('jodit').Jodit} editor */
+	isActive: function(editor, value) {
+		var style = this.parse(value);
+		var t = this;
+		var targets = this.targets(editor, style.tags);
+		return targets.length > 0 && targets.every(function(el) { return t.hasClasses(el, style.classes); });
+	},
+
+	/** @param {import('jodit').Jodit} editor */
+	isDisabled: function(editor, value) {
+		var style = this.parse(value);
+		return style.kind === 'element' && !this.targets(editor, style.tags).length;
 	}
 };
 
 Jodit.defaultOptions.controls.styles = {
 	icon: 'class-span',
 	tooltip: 'Styles',
-	list: {},
+	list: [],
+	childTemplate: function(editor, title) {
+		var span = editor.ed.createElement('span');
+		span.textContent = title;
+		return span.outerHTML;
+	},
 	childExec: function(editor, current, options) {
-		InputfieldJoditStyles.apply(editor, String(options.control.args[0]));
+		InputfieldJoditStyles.apply(editor, options.control.args[1]);
 	},
 	isChildActive: function(editor, button) {
-		return InputfieldJoditStyles.isActive(editor, String(button.control.args[0]));
+		return InputfieldJoditStyles.isActive(editor, button.control.args[1]);
 	},
 	isChildDisabled: function(editor, button) {
-		var style = InputfieldJoditStyles.parse(String(button.control.args[0]));
-		return style.tag !== 'span' && !InputfieldJoditStyles.target(editor, style.tag);
+		return InputfieldJoditStyles.isDisabled(editor, button.control.args[1]);
 	}
 };

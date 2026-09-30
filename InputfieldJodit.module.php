@@ -156,18 +156,18 @@ class InputfieldJodit extends InputfieldTextarea {
 			return array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string) $value))));
 		};
 
-		// "element.class=Label" styles an element; "class=Label" (or "span.class") styles text
+		// "elements.class=Label", e.g. "ul,ol.tick-list=Tick list"; "class=Label" is "span.class"
 		$styles = [];
-		$classes = [];
 		foreach ($lines($this->setting('joditClasses')) as $line) {
 			[$selector, $label] = array_pad(array_map('trim', explode('=', $line, 2)), 2, '');
-			[$tag, $class] = strpos($selector, '.') === false ? ['', $selector] : explode('.', $selector, 2);
-			$tag = strtolower($tag) ?: 'span';
-			$class = $this->wire()->sanitizer->name($class, false, 128, '-', ['allowedExtras' => ['-', '_']]);
-			if ($class === '' || !preg_match('/^[a-z][a-z0-9]*$/', $tag)) continue;
-			if ($label === '') $label = $class;
-			$styles["$tag.$class"] = $label;
-			if ($tag === 'span') $classes[$class] = $label;
+			$parts = explode('.', strpos($selector, '.') === false ? ".$selector" : $selector);
+			$tags = array_map('trim', explode(',', strtolower(array_shift($parts)) ?: 'span'));
+			$classes = array_filter(array_map(function ($class) {
+				return $this->wire()->sanitizer->name($class, false, 128, '-', ['allowedExtras' => ['-', '_']]);
+			}, $parts), 'strlen');
+			if (!count($classes) || preg_grep('/^[a-z][a-z0-9]*$/', $tags, PREG_GREP_INVERT)) continue;
+			$classes = implode(' ', $classes);
+			$styles[] = ['title' => $label !== '' ? $label : $classes, 'value' => implode(',', $tags) . "|$classes"];
 		}
 
 		$contentCss = $lines($this->setting('joditContentCss'));
@@ -179,6 +179,15 @@ class InputfieldJodit extends InputfieldTextarea {
 		// hasPage isn't set (Combo only sets it for InputfieldTinyMCE subfields).
 		$inPageEditor = $this->wire()->process instanceof WirePageEditor;
 		if (!$this->hasPage && !$inPageEditor) $toolbar = array_values(array_diff($toolbar, ['pwimage']));
+		// styles does everything classSpan did, for toolbars saved before it existed
+		$seen = false;
+		$toolbar = array_values(array_filter(array_map(function ($button) {
+			return $button === 'classSpan' ? 'styles' : $button;
+		}, $toolbar), function ($button) use (&$seen) {
+			if ($button !== 'styles') return true;
+			return !$seen && ($seen = true);
+		}));
+		if (!count($styles)) $toolbar = array_values(array_diff($toolbar, ['styles']));
 
 		return [
 			'buttons' => $toolbar,
@@ -186,7 +195,6 @@ class InputfieldJodit extends InputfieldTextarea {
 			'contentCss' => $contentCss,
 			'bodyClass' => trim(preg_replace('/[^\w\s-]/', '', (string) $this->setting('joditBodyClass'))),
 			'styles' => $styles,
-			'classes' => $classes,
 			'formats' => array_values(array_intersect(
 				array_map('trim', explode(',', (string) $this->setting('joditFormats'))),
 				InputfieldJoditTinyMCE::formats

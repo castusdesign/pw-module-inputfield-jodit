@@ -11,7 +11,7 @@ Why it exists: the core bundles TinyMCE 6.8.2, which has unfixed high-severity X
 - Uses ProcessWire's own **image** (`page/image/`) and **link** (`page/link/`) dialogs, through the `pwimage` and `pwlink` toolbar buttons. Double-clicking an image or link opens them too.
 - Edits in an iframe, styled with your own **content stylesheets** (e.g. `/site/assets/css/editor.css`).
 - Works in **repeaters and Repeater Matrix** items loaded after the page, in closed Inputfields, and in **language tabs**. Editors start when they become visible and are rebuilt after sorting.
-- A **styles** button for the field's own styles, like TinyMCE's: on an element around the cursor (`ul.tick-list`, `p.lead`) or on selected text.
+- A **styles** button for the field's own styles, which work like TinyMCE's: on selected text (`span.highlight`, `small.fine-print`), on the selected blocks (`p.lead`, `h2.section-title`), or on other elements in the selection (`ul.tick-list`, `table.striped`).
 - Runs saved HTML through **HTML Purifier** by default, like InputfieldTinyMCE's "purifier" feature.
 - Turns off Jodit's AI assistant, "powered by" branding, and its own image, file and video uploaders.
 
@@ -25,7 +25,7 @@ These are under **Input > Jodit editor** on the field:
 | Toolbar | `paragraph, bold, italic, underline, strikethrough, \|, ul, ol, indent, outdent, \|, pwlink, unlink, pwimage, table, hr, \|, styles, \|, undo, redo, eraser, source, fullsize` |
 | Block formats | `p,h2,h3,h4,blockquote`. Also available: `h1`, `h5`, `h6`, `pre` |
 | Height (px) | 400 |
-| Styles editors can apply (`styles` button) | none. One per line:<br>`element.class=Label` puts the class on that element around the cursor, e.g. `ul.tick-list=Tick list` or `p.lead=Lead paragraph`. It's greyed out while the cursor isn't in one, and applying it again takes it off.<br>`class=Label` wraps the selected text in a `span` with the class.<br>Without `=Label`, the class is the label. Jodit's own `classSpan` button still works, with the text styles only. |
+| Styles editors can apply (`styles` button) | none. One per line, as `element.class=Label`. What it does depends on the element, as in TinyMCE:<br>- **Inline** (`span`, `small`, `strong`, `em`, `code`, `mark`…): wraps the selected text, e.g. `span.highlight=Highlight`. A plain `class=Label` means `span.class`.<br>- **Block** (`p`, `h1`–`h6`, `blockquote`, `pre`, `div`): turns the selected blocks into that element with the class, e.g. `p.lead=Lead paragraph`.<br>- **Anything else** (`ul`, `ol`, `table`, `img`, `a`…): toggles the class on those elements in the selection, and is greyed out when there are none. Several elements can share a style: `ul,ol.tick-list=Tick list`.<br>Several classes work too: `span.btn.primary`. Without `=Label`, the classes are the label. The button is hidden when there are no styles. Toolbars saved with Jodit's `classSpan` button get `styles` instead. |
 | Content stylesheets | the module's plain default |
 | Editing area body class | `mce-content-body` (TinyMCE's), so stylesheets written for TinyMCE apply unchanged |
 | Purify HTML on save | on |
@@ -35,7 +35,7 @@ These are under **Input > Jodit editor** on the field:
 1. Change the field's **Input > Inputfield type** to Jodit and save.
 2. Under **Input > Jodit editor**, tick **Copy settings from TinyMCE** and save again.
 
-The copy uses the settings TinyMCE really applies to the field: its own settings, TinyMCE's module-wide defaults (content CSS, `defaultsJSON`, `styleFormatsCSS`), and its settings field. That becomes the Jodit toolbar, block formats, styles, content stylesheet, body class, height, purifier and "Use settings from". Anything Jodit can't do is listed after saving, for example the `anchor` button or a style with more than one class. TinyMCE's settings are left as they are, so switching back still works.
+The copy uses the settings TinyMCE really applies to the field: its own settings, TinyMCE's module-wide defaults (content CSS, `defaultsJSON`, `styleFormatsCSS`), and its settings field. That becomes the Jodit toolbar, block formats, styles, content stylesheet, body class, height, purifier and "Use settings from". Anything Jodit can't do is listed after saving, for example the `anchor` button or a style for any element (`.red-text`). TinyMCE's settings are left as they are, so switching back still works.
 
 It's a one-off copy: after it, the Jodit settings are ordinary settings you can change.
 
@@ -103,7 +103,7 @@ They check:
 - repeater items;
 - HTML Purifier on save, including values posted directly;
 - "Use settings from";
-- the styles button, for element and text styles;
+- the styles button, for text, block and element styles, including across a selection;
 - copying settings from TinyMCE, from the API and from the field settings;
 - that settings don't collide with InputfieldTinyMCE's.
 

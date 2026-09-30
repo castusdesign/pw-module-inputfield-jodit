@@ -239,14 +239,17 @@ test('TinyMCE settings are copied as TinyMCE really uses them', () => {
     joditToolbar: 'paragraph, |, styles, |, bold, italic, pwlink, unlink, source',
     joditFormats: 'p,h1,h2,h3,h4,h5,h6,blockquote,pre',
     // From the module-wide styleFormatsCSS, content CSS and defaultsJSON
-    joditClasses: 'highlight\nul.tick-list',
+    joditClasses: 'highlight\nspan.btn.primary\nul.tick-list\np.lead=Lead\nh2.section-title\nsmall.fine-print',
     joditContentCss: '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css',
     joditBodyClass: 'mce-content-body prose',
     joditHeight: 321,
     // The field doesn't have the purifier feature
     joditPurifier: 0,
   });
-  expect(notes).toEqual(["Toolbar buttons Jodit doesn't have: anchor"]);
+  expect(notes).toEqual([
+    'Styles for any element, which Jodit can\'t apply (give them an element, e.g. "p.red-text" or "span.red-text"): .red-text',
+    "Toolbar buttons Jodit doesn't have: anchor",
+  ]);
 });
 
 test('a TinyMCE field using another field\'s settings uses that field\'s Jodit settings', () => {
@@ -309,4 +312,47 @@ test('a text style wraps the selected text in a span', async ({ page }) => {
   await applyStyle(page, 'Highlight');
   await save(page);
   expect(read().body).toContain('<p><span class="highlight">First</span> paragraph');
+});
+
+test('a block style turns the block at the cursor into that element, with the class', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('p').first().click();
+  await applyStyle(page, 'Lead');
+  await bodyFrame(page).locator('h2').click();
+  await applyStyle(page, 'Section title');
+  await save(page);
+  const body = read().body;
+  expect(body).toContain('<h2 class="section-title">Heading</h2>');
+  expect(body).toContain('<p class="lead">First paragraph');
+});
+
+test('styles apply to every selected block and element', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await page.evaluate(() => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    editor.value = '<p>One</p><p>Two</p><ul><li>A</li></ul><ul><li>B</li></ul>';
+    const range = editor.ed.createRange();
+    range.setStart(editor.editor.querySelector('p').firstChild, 0);
+    range.setEnd(editor.editor.querySelectorAll('p')[1].firstChild, 3);
+    editor.s.selectRange(range);
+  });
+  await applyStyle(page, 'Lead');
+  await page.evaluate(() => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    const range = editor.ed.createRange();
+    range.setStart(editor.editor.querySelector('li').firstChild, 0);
+    range.setEnd(editor.editor.querySelectorAll('li')[1].firstChild, 1);
+    editor.s.selectRange(range);
+  });
+  await applyStyle(page, 'Tick list');
+  await save(page);
+  expect(read().body).toBe('<p class="lead">One</p><p class="lead">Two</p><ul class="tick-list"><li>A</li></ul><ul class="tick-list"><li>B</li></ul>');
+});
+
+test('a style named like a Jodit button applies the style, not the button', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectText(page, 'p', 'First');
+  await applyStyle(page, 'bold');
+  await save(page);
+  expect(read().body).toContain('<p><span class="bold">First</span> paragraph');
 });

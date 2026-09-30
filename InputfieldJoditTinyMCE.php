@@ -109,9 +109,9 @@ class InputfieldJoditTinyMCE extends Wire {
 			$formats = array_values(array_intersect(self::formats, array_merge(['p'], $formats)));
 			$settings['joditFormats'] = implode(',', $formats);
 		}
-		// Text styles as plain "class", as the setting has always taken them
+		// A text style with one class as plain "class", as the setting has always taken them
 		$settings['joditClasses'] = implode("\n", array_map(function ($style, $label) {
-			if (strpos($style, 'span.') === 0) $style = substr($style, 5);
+			if (preg_match('/^span\.([\w-]+)$/', $style, $m)) $style = $m[1];
 			return $label === '' ? $style : "$style=$label";
 		}, array_keys($styles), $styles));
 
@@ -190,15 +190,16 @@ class InputfieldJoditTinyMCE extends Wire {
 	}
 
 	/**
-	 * Styles for the "styles" button, from style formats that put one class on
-	 * text or on an element
+	 * Styles for the "styles" button, from TinyMCE style formats that apply classes
 	 *
-	 * @return array "element.class" => label ('' when TinyMCE's style had no title)
+	 * @return array "elements.class" => label ('' when TinyMCE's style had no title),
+	 *   e.g. "ul,ol.tick-list" => "Tick list"
 	 */
 	protected function styles(array $styleFormats, array &$notes): array {
 		$styles = [];
-		$skipped = [];
-		$walk = function (array $items) use (&$walk, &$styles, &$skipped) {
+		$anyElement = [];
+		$unusable = [];
+		$walk = function (array $items) use (&$walk, &$styles, &$anyElement, &$unusable) {
 			foreach ($items as $item) {
 				if (!is_array($item)) continue;
 				if (isset($item['items'])) {
@@ -206,29 +207,32 @@ class InputfieldJoditTinyMCE extends Wire {
 					continue;
 				}
 				if (empty($item['classes'])) continue;
-				$class = trim((string) $item['classes']);
-				$title = (string) ($item['title'] ?? $class);
-				// styleFormatsCSS styles without a title comment are titled with their selector
-				$label = $title === $class || preg_match('/^[\w-]*\.[\w.-]+$/', $title) ? '' : $title;
-				if (!empty($item['selector'])) {
-					$tags = array_map('trim', explode(',', (string) $item['selector']));
-				} else if (!empty($item['block'])) {
-					$tags = [(string) $item['block']];
+				// styleFormatsCSS takes a style's title from a /* comment */ by its rule
+				$comment = '';
+				$strip = function ($text) use (&$comment) {
+					return trim(preg_replace_callback('#/\*(.*?)\*/#s', function ($m) use (&$comment) {
+						$comment = trim($m[1]);
+						return '';
+					}, (string) $text));
+				};
+				$title = $strip($item['title'] ?? '');
+				$selector = $strip($item['selector'] ?? ($item['block'] ?? ($item['inline'] ?? '')));
+				// Untitled styleFormatsCSS styles are titled with their selector
+				$label = $comment !== '' ? $comment : ($title === '' || preg_match('/^[\w,.\s-]*\.[\w-]/', $title) ? '' : $title);
+				$tags = array_map('trim', explode(',', $selector));
+				$classes = preg_split('/\s+/', trim((string) $item['classes']));
+				if ($tags === ['*']) {
+					$anyElement[] = $title;
+				} else if (preg_grep('/^[a-z][a-z0-9]*$/', $tags, PREG_GREP_INVERT) || preg_grep('/^[\w-]+$/', $classes, PREG_GREP_INVERT)) {
+					$unusable[] = $title;
 				} else {
-					$tags = [(string) ($item['inline'] ?? '')];
+					$styles[implode(',', $tags) . '.' . implode('.', $classes)] = $label;
 				}
-				$simple = !preg_match('/\s/', $class) && !array_filter($tags, function ($tag) {
-					return !preg_match('/^[a-z][a-z0-9]*$/', $tag);
-				});
-				if (!$simple) {
-					$skipped[] = $title;
-					continue;
-				}
-				foreach ($tags as $tag) $styles["$tag.$class"] = $label;
 			}
 		};
 		$walk($styleFormats);
-		if (count($skipped)) $notes[] = sprintf($this->_('Styles Jodit can\'t apply, because they use more than one class or a complex selector: %s'), implode(', ', $skipped));
+		if (count($anyElement)) $notes[] = sprintf($this->_('Styles for any element, which Jodit can\'t apply (give them an element, e.g. "p.red-text" or "span.red-text"): %s'), implode(', ', $anyElement));
+		if (count($unusable)) $notes[] = sprintf($this->_('Styles with a selector Jodit can\'t use: %s'), implode(', ', $unusable));
 		return $styles;
 	}
 
