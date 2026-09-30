@@ -236,10 +236,10 @@ test('TinyMCE settings are copied as TinyMCE really uses them', () => {
   const { settings, notes } = imported('legacy');
   expect(settings).toEqual({
     // The field's toolbar, with its styles menu as block formats and classes
-    joditToolbar: 'paragraph, |, classSpan, |, bold, italic, pwlink, unlink, source',
+    joditToolbar: 'paragraph, |, styles, |, bold, italic, pwlink, unlink, source',
     joditFormats: 'p,h1,h2,h3,h4,h5,h6,blockquote,pre',
     // From the module-wide styleFormatsCSS, content CSS and defaultsJSON
-    joditClasses: 'highlight',
+    joditClasses: 'highlight\nspan.btn.primary\nul.tick-list\np.lead=Lead\nh2.section-title\nsmall.fine-print',
     joditContentCss: '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css',
     joditBodyClass: 'mce-content-body prose',
     joditHeight: 321,
@@ -247,7 +247,8 @@ test('TinyMCE settings are copied as TinyMCE really uses them', () => {
     joditPurifier: 0,
   });
   expect(notes).toEqual([
-    "Styles that apply a class to a block or element, which Jodit's classSpan button can't do: ul.tick-list",
+    'Styles for any element, which Jodit can\'t apply (give them an element, e.g. "p.red-text" or "span.red-text"): .red-text',
+    'Styles Jodit would apply differently (e.g. a style for existing headings, which Jodit would use to make headings): Existing heading',
     "Toolbar buttons Jodit doesn't have: anchor",
   ]);
 });
@@ -270,4 +271,160 @@ test('ticking "Copy settings from TinyMCE" copies them into the field\'s Jodit s
   const { stored } = imported('switched');
   expect(stored).toMatchObject({ joditToolbar: 'paragraph, |, bold, |, ol', joditFormats: 'p,h1,h2,h3,h4,h5,h6', joditHeight: 250 });
   expect(stored.joditImportTinyMCE).toBeUndefined();
+});
+
+// The "styles" button (see seed.php for body's styles)
+async function applyStyle(page, label) {
+  await page.locator('#wrap_Inputfield_body .jodit-toolbar-button_styles button').first().click();
+  await page.locator('.jodit-popup').getByText(label, { exact: true }).click();
+}
+
+test('an element style is taken off and put back on the element around the cursor', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('ul.tick-list li').first().click();
+  await applyStyle(page, 'Tick list');
+  await expect(bodyFrame(page).locator('ul')).not.toHaveClass(/tick-list/);
+  await save(page);
+  expect(read().body).toBe(stored.body.replace('<ul class="tick-list">', '<ul>'));
+
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('ul li').first().click();
+  await applyStyle(page, 'Tick list');
+  await save(page);
+  expect(read().body).toBe(stored.body);
+});
+
+test('an element style is only enabled while the cursor is in that element', async ({ page }) => {
+  const stylesButton = page.locator('#wrap_Inputfield_body .jodit-toolbar-button_styles button').first();
+  const tickList = page.locator('.jodit-popup .jodit-toolbar-button').filter({ hasText: 'Tick list' }).locator('button').first();
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('ol li').first().click();
+  await stylesButton.click();
+  await expect(tickList).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await bodyFrame(page).locator('ul li').first().click();
+  await stylesButton.click();
+  await expect(tickList).toBeEnabled();
+});
+
+test('a text style wraps the selected text in a span', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectText(page, 'p', 'First');
+  await applyStyle(page, 'Highlight');
+  await save(page);
+  expect(read().body).toContain('<p><span class="highlight">First</span> paragraph');
+});
+
+test('a block style turns the block at the cursor into that element, with the class', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('p').first().click();
+  await applyStyle(page, 'Lead');
+  await bodyFrame(page).locator('h2').click();
+  await applyStyle(page, 'Section title');
+  await bodyFrame(page).locator('p').last().click();
+  await applyStyle(page, 'Section title');
+  await save(page);
+  const body = read().body;
+  expect(body).toContain('<h2 class="section-title">Heading</h2>');
+  expect(body).toContain('<p class="lead">First paragraph');
+  expect(body).toContain('<h2 class="section-title">Last paragraph &amp; an entity.</h2>');
+});
+
+test('styles apply to every selected block and element', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await page.evaluate(() => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    editor.value = '<p>One</p><p>Two</p><ul><li>A</li></ul><ul><li>B</li></ul>';
+    const range = editor.ed.createRange();
+    range.setStart(editor.editor.querySelector('p').firstChild, 0);
+    range.setEnd(editor.editor.querySelectorAll('p')[1].firstChild, 3);
+    editor.s.selectRange(range);
+  });
+  await applyStyle(page, 'Lead');
+  await page.evaluate(() => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    const range = editor.ed.createRange();
+    range.setStart(editor.editor.querySelector('li').firstChild, 0);
+    range.setEnd(editor.editor.querySelectorAll('li')[1].firstChild, 1);
+    editor.s.selectRange(range);
+  });
+  await applyStyle(page, 'Tick list');
+  await save(page);
+  expect(read().body).toBe('<p class="lead">One</p><p class="lead">Two</p><ul class="tick-list"><li>A</li></ul><ul class="tick-list"><li>B</li></ul>');
+});
+
+test('a style named like a Jodit button applies the style, not the button', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectText(page, 'p', 'First');
+  await applyStyle(page, 'bold');
+  await save(page);
+  expect(read().body).toContain('<p><span class="bold">First</span> paragraph');
+});
+
+// Replace body's content and select from the start of `from` to the end of `to`
+async function selectAcross(page, html, from, to) {
+  await page.evaluate(([html, from, to]) => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    editor.value = html;
+    const text = (sel) => {
+      const walker = editor.ed.createTreeWalker(editor.editor.querySelector(sel), NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      return nodes;
+    };
+    const start = text(from)[0];
+    const end = text(to).pop();
+    const range = editor.ed.createRange();
+    range.setStart(start, 0);
+    range.setEnd(end, end.textContent.length);
+    editor.s.selectRange(range);
+  }, [html, from, to]);
+}
+
+test('a style on a mixed selection is added to all of it, not toggled on each', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectAcross(page, '<p class="lead">One</p><p>Two</p>', 'p:first-child', 'p:last-child');
+  await applyStyle(page, 'Lead');
+  await save(page);
+  expect(read().body).toBe('<p class="lead">One</p><p class="lead">Two</p>');
+});
+
+test('a block style goes on the block, not an inline element around the selection', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectAcross(page, '<p><strong>One</strong></p>', 'strong', 'strong');
+  await applyStyle(page, 'Lead');
+  await save(page);
+  expect(read().body).toBe('<p class="lead"><strong>One</strong></p>');
+});
+
+test('a text style on partly styled text is added to all of it', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectAcross(page, '<p><span class="highlight">One</span> Two</p>', 'p', 'p');
+  await applyStyle(page, 'Highlight');
+  await save(page);
+  expect(read().body).toBe('<p><span class="highlight">One Two</span></p>');
+});
+
+test('applying a text style again takes it off', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectText(page, 'p', 'First');
+  await applyStyle(page, 'Highlight');
+  await applyStyle(page, 'Highlight');
+  await save(page);
+  expect(read().body).toBe(stored.body);
+});
+
+test('a block style in a container of blocks styles only the loose text, not the container', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await page.evaluate(() => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    editor.value = '<div>Intro<p>Other</p></div>';
+    const range = editor.ed.createRange();
+    range.setStart(editor.editor.querySelector('div').firstChild, 2);
+    range.collapse(true);
+    editor.s.selectRange(range);
+  });
+  await applyStyle(page, 'Section title');
+  await save(page);
+  expect(read().body).toBe('<div><h2 class="section-title">Intro</h2><p>Other</p></div>');
 });

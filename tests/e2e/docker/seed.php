@@ -44,7 +44,6 @@ if (!$reset) {
     $body->inputfieldClass = 'InputfieldJodit';
     $body->contentType = FieldtypeTextarea::contentTypeHTML;
     $body->set('joditContentCss', '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css');
-    $body->set('joditClasses', "tick-list=Tick list\nhighlight=Highlight");
     $body->set('joditBodyClass', 'mce-content-body shared-settings');
     $fields->save($body);
 
@@ -100,8 +99,13 @@ if (!$reset) {
     $modules->saveConfig('InputfieldTinyMCE', array_merge($modules->getConfig('InputfieldTinyMCE'), [
         'content_css' => 'custom',
         'content_css_url' => '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css',
-        'defaultsJSON' => '{"body_class": "prose"}',
-        'styleFormatsCSS' => "span.highlight { color: red; }\nul.tick-list {}",
+        // A selector style for existing h2s, which the styles button can't represent
+        'defaultsJSON' => '{"body_class": "prose", "add_style_formats": [{"title": "Existing heading", "selector": "h2", "classes": "existing"}]}',
+        // One style of each kind: text, several classes, list, block, heading, inline element, any element
+        'styleFormatsCSS' => implode("\n", [
+            'span.highlight { color: red; }', 'span.btn.primary {}', 'ul.tick-list {}',
+            'p.lead { /* Lead */ font-size: 1.2em; }', 'h2.section-title {}', 'small.fine-print {}', '.red-text {}',
+        ]),
     ]));
 
     $legacy = $fields->get('legacy') ?: new Field();
@@ -128,6 +132,12 @@ if (!$reset) {
     }
     $basic->fieldgroup->save();
 }
+
+// body's styles, reset each time as the styles tests depend on them
+$body = $fields->get('body');
+// "span.bold=bold" is named like Jodit's Bold button, which it must not become
+$body->set('joditClasses', "ul.tick-list=Tick list\nhighlight=Highlight\np.lead=Lead\nh2.section-title=Section title\nspan.bold=bold");
+$fields->save($body);
 
 $switched = $fields->get('switched') ?: new Field();
 $switched->type = $modules->get('FieldtypeTextarea');

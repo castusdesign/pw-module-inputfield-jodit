@@ -12,5 +12,5 @@
     "moduleResolution": "bundler",
     "skipLibCheck": true
   },
-  "files": ["types/globals.d.ts", "InputfieldJodit.js", "plugins/pwimage.js", "plugins/pwlink.js"]
+  "files": ["types/globals.d.ts", "InputfieldJodit.js", "plugins/pwimage.js", "plugins/pwlink.js", "plugins/styles.js"]
 }
