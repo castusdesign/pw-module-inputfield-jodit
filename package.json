@@ -1,0 +1,13 @@
+{
+  "name": "pw-module-inputfield-jodit",
+  "private": true,
+  "description": "Build tooling for InputfieldJodit: keeps the bundled jodit/ in step with the jodit npm package",
+  "license": "MIT",
+  "scripts": {
+    "sync-jodit": "node scripts/sync-jodit.js",
+    "check-jodit": "node scripts/sync-jodit.js --check"
+  },
+  "dependencies": {
+    "jodit": "4.16.0"
+  }
+}

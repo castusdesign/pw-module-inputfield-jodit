@@ -1,0 +1,13 @@
+{
+    "name": "castusdesign/pw-module-inputfield-jodit",
+    "description": "Jodit rich text editor for ProcessWire, as a drop-in alternative to InputfieldTinyMCE",
+    "type": "processwire-module",
+    "license": ["MIT", "MPL-2.0"],
+    "homepage": "https://github.com/castusdesign/pw-module-inputfield-jodit",
+    "require": {
+        "composer/installers": "^1.0 || ^2.0"
+    },
+    "extra": {
+        "installer-name": "InputfieldJodit"
+    }
+}

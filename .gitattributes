@@ -1,0 +1,10 @@
+# Not needed in an install: Composer uses git archive, which skips these
+/.github export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/package.json export-ignore
+/package-lock.json export-ignore
+/scripts export-ignore
+
+# Vendored build: never convert line endings, so it stays byte-identical to the jodit package
+/jodit/** -text

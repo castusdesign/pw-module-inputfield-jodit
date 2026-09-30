@@ -1,0 +1,5 @@
+/* Keep Jodit's dropdowns and popups above the admin's sticky header */
+.jodit-popup,
+.jodit-dialog__box {
+	z-index: 1000;
+}
