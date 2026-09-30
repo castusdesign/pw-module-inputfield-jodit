@@ -104,17 +104,21 @@ Jodit.defaultOptions.controls.styles = {
 	icon: 'class-span',
 	tooltip: 'Styles',
 	list: [],
+	/** @param {import('jodit').Jodit} editor */
 	childTemplate: function(editor, title) {
 		var span = editor.ed.createElement('span');
 		span.textContent = title;
 		return span.outerHTML;
 	},
+	/** @param {import('jodit').Jodit} editor */
 	childExec: function(editor, current, options) {
 		InputfieldJoditStyles.apply(editor, options.control.args[1]);
 	},
+	/** @param {import('jodit').Jodit} editor */
 	isChildActive: function(editor, button) {
 		return InputfieldJoditStyles.isActive(editor, button.control.args[1]);
 	},
+	/** @param {import('jodit').Jodit} editor */
 	isChildDisabled: function(editor, button) {
 		return InputfieldJoditStyles.isDisabled(editor, button.control.args[1]);
 	}
