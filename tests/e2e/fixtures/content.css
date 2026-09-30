@@ -1,0 +1,3 @@
+/* Editing-area styles for the e2e site; scoped like a TinyMCE content stylesheet */
+.mce-content-body { font-family: sans-serif; }
+.mce-content-body .tick-list { list-style: none; }

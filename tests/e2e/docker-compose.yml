@@ -1,0 +1,43 @@
+# A throwaway ProcessWire with InputfieldJodit installed, for the e2e tests.
+#   npm run test:e2e:up     build, start and install (fresh each time)
+#   npm run test:e2e        run the Playwright tests
+#   npm run test:e2e:down   stop and delete everything
+name: inputfield-jodit-e2e
+
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: pw
+      MARIADB_USER: pw
+      MARIADB_PASSWORD: pw
+      MARIADB_ROOT_PASSWORD: root
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      retries: 30
+    tmpfs:
+      - /var/lib/mysql
+
+  web:
+    build:
+      context: docker
+      args:
+        PW_VERSION: ${PW_VERSION:-3.0.259}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_NAME: pw
+      DB_USER: pw
+      DB_PASS: pw
+      E2E_USER: e2e-admin
+      E2E_PASS: e2e-pass-12345
+    ports:
+      - "${E2E_PORT:-8090}:80"
+    volumes:
+      # The module under test, read-only, where ProcessWire expects it
+      - ../..:/var/www/html/site/modules/InputfieldJodit:ro
+      - ./docker:/e2e:ro
+      - ./fixtures:/e2e-fixtures:ro

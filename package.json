@@ -1,13 +1,19 @@
 {
   "name": "pw-module-inputfield-jodit",
   "private": true,
-  "description": "Build tooling for InputfieldJodit: keeps the bundled jodit/ in step with the jodit npm package",
+  "description": "Tooling for InputfieldJodit: keeps the bundled jodit/ in step with the jodit npm package, and runs the e2e tests",
   "license": "MIT",
   "scripts": {
     "sync-jodit": "node scripts/sync-jodit.js",
-    "check-jodit": "node scripts/sync-jodit.js --check"
+    "check-jodit": "node scripts/sync-jodit.js --check",
+    "test:e2e:up": "docker compose -f tests/e2e/docker-compose.yml up -d --build --wait && docker compose -f tests/e2e/docker-compose.yml exec -T web sh /e2e/install.sh",
+    "test:e2e": "playwright test -c tests/e2e",
+    "test:e2e:down": "docker compose -f tests/e2e/docker-compose.yml down -v"
   },
   "dependencies": {
     "jodit": "4.16.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
   }
 }

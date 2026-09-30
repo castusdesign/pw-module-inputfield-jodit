@@ -67,6 +67,30 @@ To pick up an upstream fix, diff ProcessWire's current plugin against ours, then
 diff -u path/to/processwire/wire/modules/Inputfield/InputfieldTinyMCE/plugins/pwimage.js plugins/pwimage.js
 ```
 
+## Tests
+
+`tests/e2e` holds Playwright tests that run against a throwaway ProcessWire in Docker: MariaDB, plus PHP and Apache with the pinned ProcessWire release. The install script installs the blank profile and this module. The seed script creates a Jodit body field, an images field, a repeater and a test page.
+
+They check:
+- stored HTML survives an unedited save;
+- typing and saving;
+- ProcessWire's link and image dialogs;
+- repeater items;
+- HTML Purifier on save, including values posted directly;
+- that settings don't collide with InputfieldTinyMCE's.
+
+```sh
+npm ci
+npx playwright install chromium   # once
+npm run test:e2e:up               # build and install the test site (http://localhost:8090)
+npm run test:e2e
+npm run test:e2e:down             # remove it
+```
+
+- **Test against another ProcessWire release:** set `PW_VERSION=3.0.x` when running `test:e2e:up`.
+- **Where Playwright can't download its own browser** (older Linux distributions): point `E2E_CHROMIUM_PATH` at an installed Chromium.
+- **CI:** the "End-to-end tests" workflow runs the suite on every push and pull request, including Dependabot's Jodit updates.
+
 ## Limitations
 
 - **Combo** (ProFields): enable "Jodit" under the Combo module's *Allowed field/input types* to use it for subfields. That setup is untested. Combo has a fixed list of text types (TinyMCE, CKEditor, Text and so on) that doesn't include Jodit, so Jodit subfields:

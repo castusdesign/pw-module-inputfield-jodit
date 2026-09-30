@@ -8,3 +8,4 @@
 
 # Vendored build: never convert line endings, so it stays byte-identical to the jodit package
 /jodit/** -text
+/tests export-ignore
