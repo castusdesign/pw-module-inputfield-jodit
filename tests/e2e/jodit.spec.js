@@ -396,3 +396,20 @@ test('a block style goes on the block, not an inline element around the selectio
   await save(page);
   expect(read().body).toBe('<p class="lead"><strong>One</strong></p>');
 });
+
+test('a text style on partly styled text is added to all of it', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectAcross(page, '<p><span class="highlight">One</span> Two</p>', 'p', 'p');
+  await applyStyle(page, 'Highlight');
+  await save(page);
+  expect(read().body).toBe('<p><span class="highlight">One Two</span></p>');
+});
+
+test('applying a text style again takes it off', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectText(page, 'p', 'First');
+  await applyStyle(page, 'Highlight');
+  await applyStyle(page, 'Highlight');
+  await save(page);
+  expect(read().body).toBe(stored.body);
+});

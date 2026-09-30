@@ -8,8 +8,9 @@
  * - p and h1–h6 turn the selected blocks into that element with the classes;
  * - anything else (ul, table, img, blockquote…) changes those elements in the
  *   selection, and is disabled while there are none.
- * Block and other styles make one decision for the whole selection: if every
- * target already has the style it's removed, otherwise it's added to all.
+ * Each style makes one decision for the whole selection: if all of it already
+ * has the style it's removed, otherwise it's added to all of it. (Jodit's
+ * commitStyle toggles each element on its own, so it's only used to remove.)
  *
  * Styles are {title, value} list items, so Jodit never mistakes a style for one
  * of its own controls (it looks up plain keys and labels as control names).
@@ -102,13 +103,80 @@ var InputfieldJoditStyles = {
 		return renamed;
 	},
 
+	/**
+	 * The selected text nodes, split at the selection's ends so each is wholly selected
+	 *
+	 * @param {import('jodit').Jodit} editor
+	 * @returns {Text[]}
+	 */
+	selectedText: function(editor) {
+		var sel = editor.s.sel;
+		if(!sel || !sel.rangeCount || sel.getRangeAt(0).collapsed) return [];
+		var range = sel.getRangeAt(0);
+		var start = range.startContainer, startOffset = range.startOffset;
+		var end = range.endContainer, endOffset = range.endOffset;
+		// Split the end first, so the start's offset still applies
+		if(end.nodeType === 3 && endOffset < /** @type {Text} */ (end).length) /** @type {Text} */ (end).splitText(endOffset);
+		if(start.nodeType === 3 && startOffset > 0) {
+			var tail = /** @type {Text} */ (start).splitText(startOffset);
+			if(end === start) end = tail;
+			start = tail;
+			startOffset = 0;
+		}
+		range.setStart(start, startOffset);
+		range.setEnd(end, end.nodeType === 3 ? /** @type {Text} */ (end).length : endOffset);
+		var nodes = [];
+		var walker = editor.ed.createTreeWalker(editor.editor, NodeFilter.SHOW_TEXT);
+		while(walker.nextNode()) {
+			var node = /** @type {Text} */ (walker.currentNode);
+			if(node.textContent.trim() !== '' && range.intersectsNode(node)) nodes.push(node);
+		}
+		return nodes;
+	},
+
+	/** Whether a text node is inside the inline style's element with its classes */
+	styledText: function(editor, node, style) {
+		var el = node.parentElement;
+		while(el && el !== editor.editor) {
+			if(el.nodeName.toLowerCase() === style.tags[0] && style.classes.every(function(cls) { return el.classList.contains(cls); })) return true;
+			el = el.parentElement;
+		}
+		return false;
+	},
+
+	/** @param {import('jodit').Jodit} editor */
+	applyInline: function(editor, style) {
+		var t = this;
+		var commit = function() {
+			editor.s.commitStyle({ element: /** @type {any} */ (style.tags[0]), attributes: { class: style.classes.join(' ') } });
+		};
+		var nodes = this.selectedText(editor);
+		var unstyled = nodes.filter(function(node) { return !t.styledText(editor, node, style); });
+		// Nothing selected (commitStyle styles what's typed next), or all styled: remove it
+		if(!unstyled.length) return commit();
+		var className = style.classes.join(' ');
+		unstyled.forEach(function(node) {
+			var prev = node.previousSibling;
+			if(prev && prev.nodeType === 1 && prev.nodeName.toLowerCase() === style.tags[0] && /** @type {Element} */ (prev).getAttribute('class') === className) {
+				prev.appendChild(node);
+				return;
+			}
+			var el = editor.ed.createElement(style.tags[0]);
+			el.className = className;
+			node.replaceWith(el);
+			el.appendChild(node);
+		});
+		var range = editor.ed.createRange();
+		range.setStartBefore(nodes[0]);
+		range.setEndAfter(nodes[nodes.length - 1]);
+		editor.s.selectRange(range);
+		editor.synchronizeValues();
+	},
+
 	/** @param {import('jodit').Jodit} editor */
 	apply: function(editor, value) {
 		var style = this.parse(value);
-		if(style.kind === 'inline') {
-			editor.s.commitStyle({ element: /** @type {any} */ (style.tags[0]), attributes: { class: style.classes.join(' ') } });
-			return;
-		}
+		if(style.kind === 'inline') return this.applyInline(editor, style);
 		var t = this;
 		var targets = this.styleTargets(editor, style);
 		if(!targets.length) return;
