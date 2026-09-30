@@ -73,7 +73,7 @@ npm run sync-jodit                          # copies the build into jodit/
 git add jodit package.json package-lock.json
 ```
 
-The "Checks" workflow runs two checks:
+The "Tests" workflow runs two checks, alongside the end-to-end tests:
 - **`npm run check-jodit`** fails while `jodit/` doesn't match. A Dependabot PR is therefore red until someone has run `sync-jodit` on it.
 - **`npm run typecheck`** type-checks `InputfieldJodit.js` and the plugins against the new Jodit's own type definitions. It's TypeScript over plain JavaScript (`checkJs`, no build step), so a renamed or removed method or option we use fails before merge.
 
@@ -115,7 +115,7 @@ npm run test:e2e:down             # remove it
 
 - **Test against another ProcessWire release:** set `PW_VERSION=3.0.x` when running `test:e2e:up`.
 - **Where Playwright can't download its own browser** (older Linux distributions): point `E2E_CHROMIUM_PATH` at an installed Chromium.
-- **CI:** the "End-to-end tests" workflow runs the suite on every push and pull request, including Dependabot's Jodit updates.
+- **CI:** the "Tests" workflow runs the suite on pushes to `main` and on pull requests, including Dependabot's Jodit updates. To run it against another ProcessWire release, run the workflow by hand and set its `pw_version`.
 
 ## Limitations
 

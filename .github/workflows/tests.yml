@@ -1,0 +1,66 @@
+name: Tests
+
+# checks:
+# - jodit/ is committed (ProcessWire modules install without a build step), so
+#   make sure it's exactly the build of the jodit version in package-lock.json.
+#   A Dependabot bump of jodit fails here until someone runs npm run sync-jodit.
+# - Type-check the module's JavaScript against that Jodit's types, so a renamed
+#   or removed method or option fails here too.
+# e2e:
+# - Runs the Playwright suite against a throwaway ProcessWire (tests/e2e), so a
+#   Jodit or ProcessWire update that breaks the editor fails here before merge.
+
+on:
+  # Other branches are tested by their pull request, so a push isn't tested twice
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      pw_version:
+        description: ProcessWire version (git tag) to run the end-to-end tests against
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check-jodit
+      - run: npm run typecheck
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      PW_VERSION: ${{ inputs.pw_version || '3.0.259' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:up
+      - run: npm run test:e2e
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+      - if: always()
+        run: npm run test:e2e:down
