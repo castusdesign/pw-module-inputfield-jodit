@@ -211,7 +211,7 @@ function pwJodit_link(editor) {
 			selectionText = node.outerHTML;
 			selectionHtml = selectionText;
 			
-		} else if(selectionText.length < 1) {
+		} else if(selectionText.trim().length < 1) { // Jodit: a whitespace-only selection (e.g. between list items) counts as empty
 			// If not on top of link and there is no text selected - just return (don't load iframe at all)
 			return;
 			

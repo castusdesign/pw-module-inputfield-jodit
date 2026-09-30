@@ -54,7 +54,7 @@ function pwJodit_image(editor) {
 			.removeClass('ui-resizable No Alignment resizable_setup')
 			.removeClass('rotate90 rotate180 rotate270 rotate-90 rotate-180 rotate-270')
 			.removeClass('flip_vertical flip_horizontal')
-			.attr('class');
+			.attr('class') || ''; // Jodit: no class attribute if Insert is clicked before the dialog has set up the image
 		var $linkToLarger = $('#selected_image_link', $i);
 		var linkToLargerHref = $linkToLarger.is(":checked") ? $linkToLarger.val() : ''; // link to larger version
 		var $insertElement = $('<img />').attr('src', src).attr('alt', alt);

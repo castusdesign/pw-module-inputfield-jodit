@@ -155,10 +155,14 @@ class InputfieldJodit extends InputfieldTextarea {
 		$previous = $this->val();
 
 		if ($value !== null && $value !== $previous && !$this->readonly) {
+			// parent::___processInput() sets the value to the submitted input, so
+			// always replace it with the purified value
 			parent::___processInput($input);
 			$value = $this->purifyValue((string) $this->val());
-			if ($value !== $previous) {
-				$this->val($value);
+			$this->val($value);
+			if ($value === $previous) {
+				$this->untrackChange('value');
+			} else {
 				$this->trackChange('value');
 			}
 		}
