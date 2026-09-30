@@ -248,6 +248,7 @@ test('TinyMCE settings are copied as TinyMCE really uses them', () => {
   });
   expect(notes).toEqual([
     'Styles for any element, which Jodit can\'t apply (give them an element, e.g. "p.red-text" or "span.red-text"): .red-text',
+    'Styles Jodit would apply differently (e.g. a style for existing headings, which Jodit would use to make headings): Existing heading',
     "Toolbar buttons Jodit doesn't have: anchor",
   ]);
 });
@@ -320,10 +321,13 @@ test('a block style turns the block at the cursor into that element, with the cl
   await applyStyle(page, 'Lead');
   await bodyFrame(page).locator('h2').click();
   await applyStyle(page, 'Section title');
+  await bodyFrame(page).locator('p').last().click();
+  await applyStyle(page, 'Section title');
   await save(page);
   const body = read().body;
   expect(body).toContain('<h2 class="section-title">Heading</h2>');
   expect(body).toContain('<p class="lead">First paragraph');
+  expect(body).toContain('<h2 class="section-title">Last paragraph &amp; an entity.</h2>');
 });
 
 test('styles apply to every selected block and element', async ({ page }) => {
@@ -355,4 +359,40 @@ test('a style named like a Jodit button applies the style, not the button', asyn
   await applyStyle(page, 'bold');
   await save(page);
   expect(read().body).toContain('<p><span class="bold">First</span> paragraph');
+});
+
+// Replace body's content and select from the start of `from` to the end of `to`
+async function selectAcross(page, html, from, to) {
+  await page.evaluate(([html, from, to]) => {
+    const editor = /** @type {any} */ (window).jQuery('#Inputfield_body').data('jodit');
+    editor.value = html;
+    const text = (sel) => {
+      const walker = editor.ed.createTreeWalker(editor.editor.querySelector(sel), NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      return nodes;
+    };
+    const start = text(from)[0];
+    const end = text(to).pop();
+    const range = editor.ed.createRange();
+    range.setStart(start, 0);
+    range.setEnd(end, end.textContent.length);
+    editor.s.selectRange(range);
+  }, [html, from, to]);
+}
+
+test('a style on a mixed selection is added to all of it, not toggled on each', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectAcross(page, '<p class="lead">One</p><p>Two</p>', 'p:first-child', 'p:last-child');
+  await applyStyle(page, 'Lead');
+  await save(page);
+  expect(read().body).toBe('<p class="lead">One</p><p class="lead">Two</p>');
+});
+
+test('a block style goes on the block, not an inline element around the selection', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectAcross(page, '<p><strong>One</strong></p>', 'strong', 'strong');
+  await applyStyle(page, 'Lead');
+  await save(page);
+  expect(read().body).toBe('<p class="lead"><strong>One</strong></p>');
 });

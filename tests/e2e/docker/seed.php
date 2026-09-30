@@ -99,7 +99,8 @@ if (!$reset) {
     $modules->saveConfig('InputfieldTinyMCE', array_merge($modules->getConfig('InputfieldTinyMCE'), [
         'content_css' => 'custom',
         'content_css_url' => '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css',
-        'defaultsJSON' => '{"body_class": "prose"}',
+        // A selector style for existing h2s, which the styles button can't represent
+        'defaultsJSON' => '{"body_class": "prose", "add_style_formats": [{"title": "Existing heading", "selector": "h2", "classes": "existing"}]}',
         // One style of each kind: text, several classes, list, block, heading, inline element, any element
         'styleFormatsCSS' => implode("\n", [
             'span.highlight { color: red; }', 'span.btn.primary {}', 'ul.tick-list {}',

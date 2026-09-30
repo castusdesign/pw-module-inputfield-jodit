@@ -26,6 +26,16 @@ class InputfieldJoditTinyMCE extends Wire {
 		'blockquote' => '',
 	];
 
+	/**
+	 * How the styles button treats elements, as TinyMCE's styleFormatsCSS does
+	 * (InputfieldTinyMCEFormats): inline elements wrap text, these blocks
+	 * convert blocks, and anything else only changes existing elements.
+	 * plugins/styles.js has the same lists.
+	 */
+	const inlineElements = ['abbr', 'acronym', 'b', 'bdi', 'bdo', 'big', 'button', 'cite', 'code', 'del', 'dfn', 'em', 'i', 'ins',
+		'kbd', 'label', 'mark', 'meter', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'tt', 'var'];
+	const blockElements = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+
 	/** Block formats Jodit's paragraph button supports, in menu order */
 	const formats = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre'];
 
@@ -199,7 +209,8 @@ class InputfieldJoditTinyMCE extends Wire {
 		$styles = [];
 		$anyElement = [];
 		$unusable = [];
-		$walk = function (array $items) use (&$walk, &$styles, &$anyElement, &$unusable) {
+		$different = [];
+		$walk = function (array $items) use (&$walk, &$styles, &$anyElement, &$unusable, &$different) {
 			foreach ($items as $item) {
 				if (!is_array($item)) continue;
 				if (isset($item['items'])) {
@@ -216,7 +227,8 @@ class InputfieldJoditTinyMCE extends Wire {
 					}, (string) $text));
 				};
 				$title = $strip($item['title'] ?? '');
-				$selector = $strip($item['selector'] ?? ($item['block'] ?? ($item['inline'] ?? '')));
+				$type = isset($item['selector']) ? 'selector' : (isset($item['block']) ? 'block' : 'inline');
+				$selector = $strip($item[$type] ?? '');
 				// Untitled styleFormatsCSS styles are titled with their selector
 				$label = $comment !== '' ? $comment : ($title === '' || preg_match('/^[\w,.\s-]*\.[\w-]/', $title) ? '' : $title);
 				$tags = array_map('trim', explode(',', $selector));
@@ -225,6 +237,9 @@ class InputfieldJoditTinyMCE extends Wire {
 					$anyElement[] = $title;
 				} else if (preg_grep('/^[a-z][a-z0-9]*$/', $tags, PREG_GREP_INVERT) || preg_grep('/^[\w-]+$/', $classes, PREG_GREP_INVERT)) {
 					$unusable[] = $title;
+				} else if ($this->kind($tags) !== $type) {
+					// e.g. a selector style for h2, which the styles button would apply as a block style
+					$different[] = $title;
 				} else {
 					$styles[implode(',', $tags) . '.' . implode('.', $classes)] = $label;
 				}
@@ -233,7 +248,19 @@ class InputfieldJoditTinyMCE extends Wire {
 		$walk($styleFormats);
 		if (count($anyElement)) $notes[] = sprintf($this->_('Styles for any element, which Jodit can\'t apply (give them an element, e.g. "p.red-text" or "span.red-text"): %s'), implode(', ', $anyElement));
 		if (count($unusable)) $notes[] = sprintf($this->_('Styles with a selector Jodit can\'t use: %s'), implode(', ', $unusable));
+		if (count($different)) $notes[] = sprintf($this->_('Styles Jodit would apply differently (e.g. a style for existing headings, which Jodit would use to make headings): %s'), implode(', ', $different));
 		return $styles;
+	}
+
+	/**
+	 * The TinyMCE format type the styles button gives these elements
+	 *
+	 * @return string 'inline', 'block' or 'selector'
+	 */
+	protected function kind(array $tags): string {
+		if (count($tags) === 1 && in_array($tags[0], self::inlineElements, true)) return 'inline';
+		if (count($tags) === 1 && in_array($tags[0], self::blockElements, true)) return 'block';
+		return 'selector';
 	}
 
 	/** Block format tags in TinyMCE's style formats (the "styles" button) */
