@@ -75,7 +75,7 @@ class InputfieldJoditTinyMCE extends Wire {
 		}
 
 		// Toolbar and block formats
-		$classes = [];
+		$styles = [];
 		$toolbar = [];
 		$formats = [];
 		$dropped = [];
@@ -94,11 +94,11 @@ class InputfieldJoditTinyMCE extends Wire {
 				} else if ($button === 'styles') {
 					// TinyMCE's styles menu holds both block formats and classes
 					$formats = array_merge($formats, $this->styleFormatTags($mceSettings['style_formats'] ?? []));
-					$classes = $this->classes($mceSettings['style_formats'] ?? [], $notes);
+					$styles = $this->styles($mceSettings['style_formats'] ?? [], $notes);
 				}
 				// As TinyMCE does, separate its styles/blocks menu from the other buttons
 				if ($button === 'styles' || $button === 'blocks') $toolbar[] = '|';
-				if (count($classes) && end($toolbar) === '|' && !in_array('classSpan', $toolbar)) array_push($toolbar, 'classSpan', '|');
+				if (count($styles) && end($toolbar) === '|' && !in_array('styles', $toolbar)) array_push($toolbar, 'styles', '|');
 				// TinyMCE removes links from the link's own toolbar; Jodit needs the button
 				if ($button === 'pwlink' && !preg_match('/\bunlink\b/', (string) $mceSettings['toolbar'])) $toolbar[] = 'unlink';
 			}
@@ -109,9 +109,11 @@ class InputfieldJoditTinyMCE extends Wire {
 			$formats = array_values(array_intersect(self::formats, array_merge(['p'], $formats)));
 			$settings['joditFormats'] = implode(',', $formats);
 		}
-		$settings['joditClasses'] = implode("\n", array_map(function ($class, $label) {
-			return $label === $class ? $class : "$class=$label";
-		}, array_keys($classes), $classes));
+		// Text styles as plain "class", as the setting has always taken them
+		$settings['joditClasses'] = implode("\n", array_map(function ($style, $label) {
+			if (strpos($style, 'span.') === 0) $style = substr($style, 5);
+			return $label === '' ? $style : "$style=$label";
+		}, array_keys($styles), $styles));
 
 		// Editing area
 		$css = (string) $helper->getContentCssUrl((string) ($mceSettings['content_css'] ?? ''));
@@ -188,35 +190,46 @@ class InputfieldJoditTinyMCE extends Wire {
 	}
 
 	/**
-	 * Classes for Jodit's classSpan button, from style formats that apply a class to text
+	 * Styles for the "styles" button, from style formats that put one class on
+	 * text or on an element
 	 *
-	 * @return array class => label
+	 * @return array "element.class" => label ('' when TinyMCE's style had no title)
 	 */
-	protected function classes(array $styleFormats, array &$notes): array {
-		$classes = [];
+	protected function styles(array $styleFormats, array &$notes): array {
+		$styles = [];
 		$skipped = [];
-		$walk = function (array $items) use (&$walk, &$classes, &$skipped) {
+		$walk = function (array $items) use (&$walk, &$styles, &$skipped) {
 			foreach ($items as $item) {
 				if (!is_array($item)) continue;
 				if (isset($item['items'])) {
 					$walk($item['items']);
-				} else if (!empty($item['classes'])) {
-					$title = (string) ($item['title'] ?? $item['classes']);
-					// styleFormatsCSS styles without a title comment are titled with their selector
-					$untitled = $title === $item['classes'] || preg_match('/^[\w-]*\.[\w.-]+$/', $title);
-					if (($item['inline'] ?? '') === 'span' && empty($item['selector']) && empty($item['block'])) {
-						foreach (preg_split('/\s+/', trim((string) $item['classes'])) as $class) {
-							$classes[$class] = $untitled ? $class : $title;
-						}
-					} else {
-						$skipped[] = $title;
-					}
+					continue;
 				}
+				if (empty($item['classes'])) continue;
+				$class = trim((string) $item['classes']);
+				$title = (string) ($item['title'] ?? $class);
+				// styleFormatsCSS styles without a title comment are titled with their selector
+				$label = $title === $class || preg_match('/^[\w-]*\.[\w.-]+$/', $title) ? '' : $title;
+				if (!empty($item['selector'])) {
+					$tags = array_map('trim', explode(',', (string) $item['selector']));
+				} else if (!empty($item['block'])) {
+					$tags = [(string) $item['block']];
+				} else {
+					$tags = [(string) ($item['inline'] ?? '')];
+				}
+				$simple = !preg_match('/\s/', $class) && !array_filter($tags, function ($tag) {
+					return !preg_match('/^[a-z][a-z0-9]*$/', $tag);
+				});
+				if (!$simple) {
+					$skipped[] = $title;
+					continue;
+				}
+				foreach ($tags as $tag) $styles["$tag.$class"] = $label;
 			}
 		};
 		$walk($styleFormats);
-		if (count($skipped)) $notes[] = sprintf($this->_('Styles that apply a class to a block or element, which Jodit\'s classSpan button can\'t do: %s'), implode(', ', $skipped));
-		return $classes;
+		if (count($skipped)) $notes[] = sprintf($this->_('Styles Jodit can\'t apply, because they use more than one class or a complex selector: %s'), implode(', ', $skipped));
+		return $styles;
 	}
 
 	/** Block format tags in TinyMCE's style formats (the "styles" button) */

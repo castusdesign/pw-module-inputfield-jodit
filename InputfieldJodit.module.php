@@ -18,7 +18,7 @@ require_once __DIR__ . '/InputfieldJoditTinyMCE.php';
  * @property int $joditHeight Editor height in pixels
  * @property string $joditContentCss Stylesheet URLs for the editing area, one per line
  * @property string $joditBodyClass Class(es) on the editing area's <body>, for content stylesheets
- * @property string $joditClasses CSS classes editors can apply, one per line as "class" or "class=Label"
+ * @property string $joditClasses Styles editors can apply, one per line as "element.class=Label" or "class=Label"
  * @property string $joditFormats Block formats, comma-separated from p,h1,h2,h3,h4,h5,h6,blockquote,pre
  * @property int $joditPurifier Run saved HTML through HTML Purifier (1) or not (0)
  * @property int $joditImportTinyMCE Set by the field settings to copy TinyMCE's settings on the next edit
@@ -40,7 +40,7 @@ class InputfieldJodit extends InputfieldTextarea {
 		];
 	}
 
-	const defaultToolbar = 'paragraph, bold, italic, underline, strikethrough, |, ul, ol, indent, outdent, |, pwlink, unlink, pwimage, table, hr, |, classSpan, |, undo, redo, eraser, source, fullsize';
+	const defaultToolbar = 'paragraph, bold, italic, underline, strikethrough, |, ul, ol, indent, outdent, |, pwlink, unlink, pwimage, table, hr, |, styles, |, undo, redo, eraser, source, fullsize';
 
 	/** @var bool Whether the shared assets have been queued for this request */
 	protected static $assetsReady = false;
@@ -87,6 +87,7 @@ class InputfieldJodit extends InputfieldTextarea {
 		$config->scripts->add($url . 'jodit/jodit.min.js');
 		$config->scripts->add($url . 'plugins/pwimage.js');
 		$config->scripts->add($url . 'plugins/pwlink.js');
+		$config->scripts->add($url . 'plugins/styles.js');
 		$config->scripts->add($url . 'InputfieldJodit.js');
 
 		/** @var JqueryUI $jQueryUI */
@@ -155,11 +156,18 @@ class InputfieldJodit extends InputfieldTextarea {
 			return array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string) $value))));
 		};
 
+		// "element.class=Label" styles an element; "class=Label" (or "span.class") styles text
+		$styles = [];
 		$classes = [];
 		foreach ($lines($this->setting('joditClasses')) as $line) {
-			[$class, $label] = array_pad(array_map('trim', explode('=', $line, 2)), 2, '');
+			[$selector, $label] = array_pad(array_map('trim', explode('=', $line, 2)), 2, '');
+			[$tag, $class] = strpos($selector, '.') === false ? ['', $selector] : explode('.', $selector, 2);
+			$tag = strtolower($tag) ?: 'span';
 			$class = $this->wire()->sanitizer->name($class, false, 128, '-', ['allowedExtras' => ['-', '_']]);
-			if ($class !== '') $classes[$class] = $label !== '' ? $label : $class;
+			if ($class === '' || !preg_match('/^[a-z][a-z0-9]*$/', $tag)) continue;
+			if ($label === '') $label = $class;
+			$styles["$tag.$class"] = $label;
+			if ($tag === 'span') $classes[$class] = $label;
 		}
 
 		$contentCss = $lines($this->setting('joditContentCss'));
@@ -177,6 +185,7 @@ class InputfieldJodit extends InputfieldTextarea {
 			'height' => max(100, (int) $this->setting('joditHeight')),
 			'contentCss' => $contentCss,
 			'bodyClass' => trim(preg_replace('/[^\w\s-]/', '', (string) $this->setting('joditBodyClass'))),
+			'styles' => $styles,
 			'classes' => $classes,
 			'formats' => array_values(array_intersect(
 				array_map('trim', explode(',', (string) $this->setting('joditFormats'))),
@@ -322,8 +331,8 @@ class InputfieldJodit extends InputfieldTextarea {
 
 		$f = $modules->get('InputfieldTextarea');
 		$f->attr('name', 'joditClasses');
-		$f->label = $this->_('Classes editors can apply');
-		$f->description = $this->_('One per line, as "class" or "class=Label". Shown in the "classSpan" toolbar button.');
+		$f->label = $this->_('Styles editors can apply');
+		$f->description = $this->_('One per line, shown in the "styles" toolbar button. "element.class=Label" puts the class on that element around the cursor, e.g. "ul.tick-list=Tick list" or "p.lead=Lead paragraph". "class=Label" wraps the selected text in a span with the class.');
 		$f->attr('value', $this->joditClasses);
 		$f->attr('rows', 4);
 		$f->columnWidth = 50;

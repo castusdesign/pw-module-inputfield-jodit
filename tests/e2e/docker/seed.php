@@ -44,7 +44,7 @@ if (!$reset) {
     $body->inputfieldClass = 'InputfieldJodit';
     $body->contentType = FieldtypeTextarea::contentTypeHTML;
     $body->set('joditContentCss', '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css');
-    $body->set('joditClasses', "tick-list=Tick list\nhighlight=Highlight");
+    $body->set('joditClasses', "ul.tick-list=Tick list\nhighlight=Highlight");
     $body->set('joditBodyClass', 'mce-content-body shared-settings');
     $fields->save($body);
 

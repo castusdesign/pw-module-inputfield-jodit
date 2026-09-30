@@ -236,20 +236,17 @@ test('TinyMCE settings are copied as TinyMCE really uses them', () => {
   const { settings, notes } = imported('legacy');
   expect(settings).toEqual({
     // The field's toolbar, with its styles menu as block formats and classes
-    joditToolbar: 'paragraph, |, classSpan, |, bold, italic, pwlink, unlink, source',
+    joditToolbar: 'paragraph, |, styles, |, bold, italic, pwlink, unlink, source',
     joditFormats: 'p,h1,h2,h3,h4,h5,h6,blockquote,pre',
     // From the module-wide styleFormatsCSS, content CSS and defaultsJSON
-    joditClasses: 'highlight',
+    joditClasses: 'highlight\nul.tick-list',
     joditContentCss: '/site/modules/InputfieldJodit/tests/e2e/fixtures/content.css',
     joditBodyClass: 'mce-content-body prose',
     joditHeight: 321,
     // The field doesn't have the purifier feature
     joditPurifier: 0,
   });
-  expect(notes).toEqual([
-    "Styles that apply a class to a block or element, which Jodit's classSpan button can't do: ul.tick-list",
-    "Toolbar buttons Jodit doesn't have: anchor",
-  ]);
+  expect(notes).toEqual(["Toolbar buttons Jodit doesn't have: anchor"]);
 });
 
 test('a TinyMCE field using another field\'s settings uses that field\'s Jodit settings', () => {
@@ -270,4 +267,46 @@ test('ticking "Copy settings from TinyMCE" copies them into the field\'s Jodit s
   const { stored } = imported('switched');
   expect(stored).toMatchObject({ joditToolbar: 'paragraph, |, bold, |, ol', joditFormats: 'p,h1,h2,h3,h4,h5,h6', joditHeight: 250 });
   expect(stored.joditImportTinyMCE).toBeUndefined();
+});
+
+// The "styles" button (see seed.php for body's styles)
+async function applyStyle(page, label) {
+  await page.locator('#wrap_Inputfield_body .jodit-toolbar-button_styles button').first().click();
+  await page.locator('.jodit-popup').getByText(label, { exact: true }).click();
+}
+
+test('an element style is taken off and put back on the element around the cursor', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('ul.tick-list li').first().click();
+  await applyStyle(page, 'Tick list');
+  await expect(bodyFrame(page).locator('ul')).not.toHaveClass(/tick-list/);
+  await save(page);
+  expect(read().body).toBe(stored.body.replace('<ul class="tick-list">', '<ul>'));
+
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('ul li').first().click();
+  await applyStyle(page, 'Tick list');
+  await save(page);
+  expect(read().body).toBe(stored.body);
+});
+
+test('an element style is only enabled while the cursor is in that element', async ({ page }) => {
+  const stylesButton = page.locator('#wrap_Inputfield_body .jodit-toolbar-button_styles button').first();
+  const tickList = page.locator('.jodit-popup .jodit-toolbar-button').filter({ hasText: 'Tick list' }).locator('button').first();
+  await openEditor(page, stored.pageId);
+  await bodyFrame(page).locator('ol li').first().click();
+  await stylesButton.click();
+  await expect(tickList).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await bodyFrame(page).locator('ul li').first().click();
+  await stylesButton.click();
+  await expect(tickList).toBeEnabled();
+});
+
+test('a text style wraps the selected text in a span', async ({ page }) => {
+  await openEditor(page, stored.pageId);
+  await selectText(page, 'p', 'First');
+  await applyStyle(page, 'Highlight');
+  await save(page);
+  expect(read().body).toContain('<p><span class="highlight">First</span> paragraph');
 });

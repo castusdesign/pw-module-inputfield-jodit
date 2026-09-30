@@ -118,6 +118,7 @@ var InputfieldJodit = {
 			uploader: { insertImageAsBase64URI: false },
 			controls: {
 				paragraph: { list: formatList },
+				styles: { list: s.styles || {} },
 				classSpan: { list: s.classes || {} }
 			},
 			popup: {
