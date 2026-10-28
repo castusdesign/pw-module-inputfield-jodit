@@ -12,7 +12,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "jodit": "4.16.0"
+    "jodit": "4.18.10"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
