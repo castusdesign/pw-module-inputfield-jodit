@@ -1,4 +1,4 @@
-FROM php:8.4-apache
+FROM public.ecr.aws/g8h1d3o3/php:8.4.28-apache-trixie
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libpng-dev libjpeg-dev libzip-dev unzip \
